@@ -522,8 +522,17 @@
         return (+n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       }
 
+      /** Parses current input value — uses valueAsNumber for type=number, then trimmed string fallback. */
       function parseFieldNumber(inputEl) {
-        var s = String(inputEl.value).trim();
+        if (!inputEl) return null;
+        if (inputEl.tagName === "INPUT" && inputEl.type === "number") {
+          var vn = inputEl.valueAsNumber;
+          if (!Number.isNaN(vn) && vn >= 0) return vn;
+        }
+        var raw = inputEl.value;
+        var s = String(raw !== undefined && raw !== null ? raw : "")
+          .trim()
+          .replace(/,/g, "");
         if (s === "") return null;
         var n = Number(s);
         if (!Number.isFinite(n) || n < 0) return null;
@@ -551,6 +560,16 @@
         return inputMm * mSel.inP + outputMm * mSel.outP;
       }
 
+      function stripBestBadges() {
+        ["cardPayg", "cardHourly", "cardMonthlyRes", "cardAnnualRes"].forEach(function (cid) {
+          var ce = document.getElementById(cid);
+          ce.classList.remove("best");
+          var badgeEl = ce.querySelector(".badge");
+          if (badgeEl) badgeEl.remove();
+        });
+      }
+
+      /** Full reset — no usable token totals yet */
       function clearComparisonCards() {
         ["amtPayg", "amtHourly", "amtMonthlyRes", "amtAnnualRes"].forEach(function (id) {
           document.getElementById(id).textContent = "--";
@@ -558,15 +577,20 @@
         ["savePayg", "saveHourly", "saveMonthlyRes", "saveAnnualRes"].forEach(function (id) {
           document.getElementById(id).textContent = "";
         });
-        ["cardPayg", "cardHourly", "cardMonthlyRes", "cardAnnualRes"].forEach(function (cid) {
-          var ce = document.getElementById(cid);
-          ce.classList.remove("best");
-          var badgeEl = ce.querySelector(".badge");
-          if (badgeEl) badgeEl.remove();
-        });
+        stripBestBadges();
         document.getElementById("breakevenLabels").innerHTML =
           '<span style="color:var(--muted);font-variant-numeric:tabular-nums">--</span>';
         document.getElementById("summaryText").textContent = "--";
+      }
+
+      /** PTU capacity lines stay pending; PAYG totals from scenario are shown separately in render. */
+      function clearPtuOnlyRows() {
+        ["amtHourly", "amtMonthlyRes", "amtAnnualRes"].forEach(function (id) {
+          document.getElementById(id).textContent = "--";
+        });
+        ["saveHourly", "saveMonthlyRes", "saveAnnualRes"].forEach(function (id) {
+          document.getElementById(id).textContent = "";
+        });
       }
 
       function getHorizonMonths() {
@@ -668,42 +692,49 @@
         el.claudeMessage.classList.remove("visible");
 
         var tokEntered = tokensEntered();
+        var ptuSnap = parseNormalizedPtu();
+
         if (!tokEntered) {
           el.tpmInput.textContent = "--";
           el.tpmOutput.textContent = "--";
-        } else {
-          el.tpmInput.textContent = Math.round(tpmFromMonthlyMillions(inputMm)).toLocaleString("en-US");
-          el.tpmOutput.textContent = Math.round(tpmFromMonthlyMillions(outputMm)).toLocaleString("en-US");
-        }
-
-        var ptuSnap = parseNormalizedPtu();
-        var allRequired = tokEntered && ptuSnap !== null;
-
-        if (!allRequired) {
           strongEl.textContent = "--";
-          clearComparisonCards(false);
+          clearComparisonCards();
           destroyChart();
           return;
         }
+
+        el.tpmInput.textContent = Math.round(tpmFromMonthlyMillions(inputMm)).toLocaleString("en-US");
+        el.tpmOutput.textContent = Math.round(tpmFromMonthlyMillions(outputMm)).toLocaleString("en-US");
 
         var base = serverlessMonthlyForModel(mSel, inputMm, outputMm);
         strongEl.textContent = fmtMoney2(base);
 
         var horizon = getHorizonMonths();
-        var ptu = ptuSnap;
+        var paygTotal = totalPaygOverHorizon(horizon, base, gf);
+        var cardAnnual = document.getElementById("cardAnnualRes");
+        var showAnnualCard = horizon >= 12;
+        cardAnnual.style.display = showAnnualCard ? "" : "none";
 
+        if (ptuSnap === null) {
+          document.getElementById("amtPayg").textContent = fmtMoney(paygTotal);
+          document.getElementById("savePayg").textContent = "";
+          clearPtuOnlyRows();
+          stripBestBadges();
+          document.getElementById("breakevenLabels").innerHTML =
+            '<span style="color:var(--muted);font-variant-numeric:tabular-nums">Enter PTU count to compare hourly and reservation options.</span>';
+          document.getElementById("summaryText").textContent =
+            '--\nEnter PTU count above to compute full reservation comparison.';
+          drawChart(horizon, base, gf, null, null, showAnnualCard, null, null, null);
+          return;
+        }
+
+        var ptu = ptuSnap;
         var deploy = getDeployType();
         var hourly = HOURLY_RATES[deploy === "global" ? "global" : deploy === "datazone" ? "datazone" : "regional"];
-
-        var paygTotal = totalPaygOverHorizon(horizon, base, gf);
         var hourlyMonthly = ptuMonthlyHourlySpend(ptu, hourly);
         var hourlyTotal = hourlyMonthly * horizon;
         var monthlyResTotal = ptu * MONTHLY_RES * horizon;
-        var showAnnualCard = horizon >= 12;
         var annualTotal = showAnnualCard ? ptu * ANNUAL_RES_PER_MO * horizon : 0;
-
-        var cardAnnual = document.getElementById("cardAnnualRes");
-        cardAnnual.style.display = showAnnualCard ? "" : "none";
 
         document.getElementById("amtPayg").textContent = fmtMoney(paygTotal);
         document.getElementById("amtHourly").textContent = fmtMoney(hourlyTotal);
@@ -729,12 +760,7 @@
         if (showAnnualCard) amounts.push({ key: "cardAnnualRes", total: annualTotal });
 
         var best = amounts.reduce(function (a, b) { return b.total < a.total ? b : a; });
-        amounts.forEach(function (a) {
-          var ce = document.getElementById(a.key);
-          ce.classList.remove("best");
-          var badgeEl = ce.querySelector(".badge");
-          if (badgeEl) badgeEl.remove();
-        });
+        stripBestBadges();
         var bestCard = document.getElementById(best.key);
         bestCard.classList.add("best");
         var bd = document.createElement("span");
@@ -783,6 +809,7 @@
         drawChart(horizon, base, gf, ptu, hourly, showAnnualCard, beHourly, beMonthly, showAnnualCard ? beAnnual : null);
       }
 
+      /** If `ptu` or `hourlyRate` is null, render cumulative PAYG only (growth scenario without PTU curves). */
       function drawChart(horizon, baseCost, g, ptu, hourlyRate, showAnnual, beHourly, beMonthly, beAnnual) {
         var labels = [];
         for (var mi = 1; mi <= horizon; mi++) labels.push(mi.toString());
@@ -790,51 +817,13 @@
         var dataPayg = labels.map(function (_, i) {
           return cumulativePaygAtMonth(i + 1, baseCost, g);
         });
-        var hourlyMo = ptuMonthlyHourlySpend(ptu, hourlyRate);
-        var dataHourly = labels.map(function (_, i) {
-          return hourlyMo * (i + 1);
-        });
-        var dataMonthlyRes = labels.map(function (_, i) {
-          return ptu * MONTHLY_RES * (i + 1);
-        });
-        var dataAnnualRes = showAnnual
-          ? labels.map(function (_, i) {
-              return ptu * ANNUAL_RES_PER_MO * (i + 1);
-            })
-          : null;
 
-        var bePlugin = {
-          id: "breakevenDots",
-          afterDatasetsDraw: function (chart) {
-            function drawIntersection(datasetIndex, beMonth, lineColor, labelYOffset) {
-              if (!beMonth || beMonth > horizon || beMonth < 1) return;
-              var meta = chart.getDatasetMeta(datasetIndex);
-              if (!meta.data[beMonth - 1]) return;
-              var point = meta.data[beMonth - 1];
-              var ctx = chart.ctx;
-              var yOff = typeof labelYOffset === "number" ? labelYOffset : 0;
-              ctx.save();
-              ctx.beginPath();
-              ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-              ctx.fillStyle = lineColor;
-              ctx.fill();
-              ctx.lineWidth = 2;
-              ctx.strokeStyle = "#fff";
-              ctx.stroke();
-              ctx.font = "11px Segoe UI, sans-serif";
-              ctx.fillStyle = "#e6edf3";
-              ctx.textAlign = "left";
-              ctx.fillText("Break-even: Month " + beMonth, point.x + 10, point.y + yOff - 6);
-              ctx.restore();
-            }
-            drawIntersection(1, beHourly, "#fbbf24", 14);
-            drawIntersection(2, beMonthly, "#a855f7", 28);
-            if (showAnnual) drawIntersection(3, beAnnual, "#22d3ee", 42);
-          },
-        };
-
-        var ctx = document.getElementById("costChart").getContext("2d");
-        destroyChart();
+        var hasPtuSizing =
+          hourlyRate !== null &&
+          hourlyRate !== undefined &&
+          ptu !== null &&
+          ptu !== undefined &&
+          Number.isFinite(ptu);
 
         var datasets = [
           {
@@ -845,36 +834,89 @@
             fill: false,
             tension: 0.22,
           },
-          {
-            label: "PTU Hourly",
-            data: dataHourly,
-            borderColor: "#fbbf24",
-            stepped: false,
-            fill: false,
-            tension: 0,
-          },
-          {
-            label: "PTU Monthly Reservation",
-            data: dataMonthlyRes,
-            borderColor: "#a855f7",
-            tension: 0,
-            fill: false,
-          },
         ];
-        if (showAnnual && dataAnnualRes) {
-          datasets.push({
-            label: "PTU Annual Reservation",
-            data: dataAnnualRes,
-            borderColor: "#22d3ee",
-            tension: 0,
-            fill: false,
+
+        var pluginsList = [];
+
+        if (hasPtuSizing) {
+          var hourlyMo = ptuMonthlyHourlySpend(ptu, hourlyRate);
+          var dataHourly = labels.map(function (_, i) {
+            return hourlyMo * (i + 1);
+          });
+          var dataMonthlyRes = labels.map(function (_, i) {
+            return ptu * MONTHLY_RES * (i + 1);
+          });
+          var dataAnnualRes = showAnnual
+            ? labels.map(function (_, i) {
+                return ptu * ANNUAL_RES_PER_MO * (i + 1);
+              })
+            : null;
+
+          datasets.push(
+            {
+              label: "PTU Hourly",
+              data: dataHourly,
+              borderColor: "#fbbf24",
+              stepped: false,
+              fill: false,
+              tension: 0,
+            },
+            {
+              label: "PTU Monthly Reservation",
+              data: dataMonthlyRes,
+              borderColor: "#a855f7",
+              tension: 0,
+              fill: false,
+            },
+          );
+          if (showAnnual && dataAnnualRes) {
+            datasets.push({
+              label: "PTU Annual Reservation",
+              data: dataAnnualRes,
+              borderColor: "#22d3ee",
+              tension: 0,
+              fill: false,
+            });
+          }
+
+          pluginsList.push({
+            id: "breakevenDots",
+            afterDatasetsDraw: function (chart) {
+              function drawIntersection(datasetIndex, beMonth, lineColor, labelYOffset) {
+                if (!beMonth || beMonth > horizon || beMonth < 1) return;
+                var meta = chart.getDatasetMeta(datasetIndex);
+                if (!meta.data[beMonth - 1]) return;
+                var point = meta.data[beMonth - 1];
+                var ctx = chart.ctx;
+                var yOff = typeof labelYOffset === "number" ? labelYOffset : 0;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = lineColor;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#fff";
+                ctx.stroke();
+                ctx.font = "11px Segoe UI, sans-serif";
+                ctx.fillStyle = "#e6edf3";
+                ctx.textAlign = "left";
+                ctx.fillText("Break-even: Month " + beMonth, point.x + 10, point.y + yOff - 6);
+                ctx.restore();
+              }
+              drawIntersection(1, beHourly, "#fbbf24", 14);
+              drawIntersection(2, beMonthly, "#a855f7", 28);
+              if (showAnnual) drawIntersection(3, beAnnual, "#22d3ee", 42);
+            },
           });
         }
+
+        var ctx = document.getElementById("costChart").getContext("2d");
+        destroyChart();
 
         chartInst = new Chart(ctx, {
           type: "line",
           data: { labels: labels, datasets: datasets },
-          plugins: [bePlugin],
+          plugins: pluginsList,
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -903,12 +945,18 @@
         });
       }
 
+      function bindImmediate(elm) {
+        ["input", "change", "keyup"].forEach(function (ev) {
+          elm.addEventListener(ev, render);
+        });
+      }
+
       function wire() {
         el.modelSelect.addEventListener("change", render);
         el.modelSelect.addEventListener("input", render);
-        el.inputMm.addEventListener("input", render);
-        el.outputMm.addEventListener("input", render);
-        el.ptuCount.addEventListener("input", render);
+        bindImmediate(el.inputMm);
+        bindImmediate(el.outputMm);
+        bindImmediate(el.ptuCount);
         document.querySelectorAll('input[name="deployType"]').forEach(function (r) {
           r.addEventListener("change", render);
           r.addEventListener("input", render);
