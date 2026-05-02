@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure AI Foundry: PTU Commitment Advisor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1c2430;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #0078d4;
+      --accent-dim: #1a76d6;
+      --success: #3fb950;
+      --warn: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    header.page-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    header.page-header h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.55rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    header.page-header .sub {
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 52ch;
+    }
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1.25rem;
+    }
+    .step-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.85rem;
+      height: 1.85rem;
+      border-radius: 4px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .step h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    input[type="number"],
+    select {
+      width: 100%;
+      max-width: 280px;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    input[type="range"] {
+      width: 100%;
+      max-width: 400px;
+      accent-color: var(--accent);
+    }
+    fieldset.inline {
+      border: none;
+      padding: 0;
+      margin: 0.75rem 0 0;
+    }
+    fieldset.inline legend {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+      padding: 0;
+    }
+    .radios label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-right: 1.25rem;
+      margin-bottom: 0;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .row {
+      margin-bottom: 1rem;
+    }
+    .grid-2 {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width: 640px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .cost-pill {
+      display: inline-block;
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.85rem;
+      background: var(--surface-2);
+      border-radius: 6px;
+      border-left: 4px solid var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .cost-pill strong { color: var(--text); font-size: 1.05rem; }
+    .instruction-card {
+      border: 1px solid var(--accent);
+      background: rgba(0, 120, 212, 0.08);
+      border-radius: 8px;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 0.85rem;
+    }
+    .instruction-card ol {
+      margin: 0.5rem 0 1rem;
+      padding-left: 1.25rem;
+      color: var(--text);
+    }
+    .instruction-card ol li { margin-bottom: 0.35rem; }
+    .btn-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.55rem 1rem;
+      background: var(--accent);
+      color: #fff !important;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-link:hover { background: var(--accent-dim); color: #fff; }
+    .helper-tpm {
+      font-size: 0.875rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 1rem;
+    }
+    .helper-tpm strong { color: var(--text); }
+    table.ref {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.825rem;
+      margin: 0.85rem 0;
+    }
+    table.ref th, table.ref td {
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.55rem;
+      text-align: left;
+    }
+    table.ref th { background: var(--surface-2); color: var(--muted); font-weight: 600; }
+    .warn-amber {
+      color: var(--warn);
+      font-size: 0.88rem;
+      margin-top: 0.65rem;
+    }
+    .model-note {
+      font-size: 0.8rem;
+      color: var(--warn);
+      margin-top: 0.35rem;
+    }
+    #ptu-steps.hidden { display: none; }
+    .claude-only {
+      display: none;
+      padding: 1rem;
+      background: var(--surface-2);
+      border-radius: 6px;
+      border-left: 4px solid var(--accent);
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+    .claude-only.visible { display: block; }
+    .growth-readout {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+      font-weight: 600;
+      margin-top: 0.25rem;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 920px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 480px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+    .card-cost {
+      background: var(--surface-2);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 0.95rem;
+      font-size: 0.82rem;
+    }
+    .card-cost.best {
+      border-color: var(--success);
+      box-shadow: 0 0 0 1px var(--success);
+    }
+    .card-cost h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .card-cost .amount {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+    .card-cost .sub {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .card-cost .badge {
+      display: inline-block;
+      margin-top: 0.5rem;
+      color: var(--success);
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+    .card-cost .save { font-size: 0.76rem; color: var(--muted); margin-top: 0.35rem; }
+    .chart-box {
+      position: relative;
+      height: 320px;
+      margin-top: 0.75rem;
+    }
+    .chart-breakeven-legend {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 0.85rem;
+    }
+    footer.foot {
+      margin-top: 2rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="page-header">
+      <h1>Azure AI Foundry: PTU Commitment Advisor</h1>
+      <p class="sub">
+        Compare Serverless Pay-as-you-go versus PTU commitment (hourly, monthly reservation, annual reservation) using Microsoft-published pricing. Obtain PTU sizing from the Azure Capacity Planner—this tool does not estimate PTU counts.
+      </p>
+    </header>
+
+    <section class="step" id="step1">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <h2>Step 1: Enter your current monthly usage</h2>
+      </div>
+      <div class="row">
+        <label for="modelSelect">Model</label>
+        <select id="modelSelect"></select>
+        <div id="modelPricingLine" style="margin-top:0.5rem;color:var(--muted);font-size:0.875rem;"></div>
+        <div id="modelIndicativeNote" class="model-note"></div>
+      </div>
+      <div class="grid-2">
+        <div class="row">
+          <label for="inputMm">Monthly Input Tokens (millions)</label>
+          <input type="number" id="inputMm" min="0" step="any" inputmode="decimal" placeholder="e.g. 100" />
+        </div>
+        <div class="row">
+          <label for="outputMm">Monthly Output Tokens (millions)</label>
+          <input type="number" id="outputMm" min="0" step="any" inputmode="decimal" placeholder="e.g. 20" />
+        </div>
+      </div>
+      <div class="cost-pill" id="serverlessMonthly">Current monthly Serverless cost: <strong>--</strong></div>
+      <div id="claudeMessage" class="claude-only"></div>
+    </section>
+
+    <div id="ptu-steps">
+      <section class="step" id="step2">
+        <div class="step-header">
+          <span class="step-num">2</span>
+          <h2>Step 2: Calculate your PTU count in Azure portal</h2>
+        </div>
+        <div class="instruction-card" role="region" aria-label="Azure Capacity Planner steps">
+          <strong style="display:block;margin-bottom:0.5rem;color:var(--text);">To get your PTU count:</strong>
+          <ol>
+            <li>Open Azure AI Foundry portal</li>
+            <li>Go to: Shared resources → Model Quota → Azure OpenAI Provisioned</li>
+            <li>Click "Capacity Planner"</li>
+            <li>Enter your Input TPM and Output TPM</li>
+            <li>Click Calculate</li>
+            <li>Enter the recommended PTU count below</li>
+          </ol>
+          <a class="btn-link" href="https://oai.azure.com/portal/calculator" target="_blank" rel="noopener noreferrer">→ Open Azure Capacity Calculator ↗</a>
+        </div>
+        <p class="helper-tpm">
+          Your Input TPM = <strong id="tpmInput">--</strong><br />
+          Your Output TPM = <strong id="tpmOutput">--</strong><br />
+          Copy these numbers into the Azure Capacity Calculator.
+        </p>
+        <div class="row">
+          <label for="ptuCount">PTU Count (from Azure Capacity Calculator)</label>
+          <input type="number" id="ptuCount" min="15" step="5" inputmode="numeric" placeholder="e.g. 100" />
+        </div>
+        <fieldset class="inline">
+          <legend>Deployment type</legend>
+          <div class="radios">
+            <label><input type="radio" name="deployType" value="global" checked /> Global PTU — $1.00/PTU/hour</label>
+            <label><input type="radio" name="deployType" value="datazone" /> Data Zone PTU — $1.10/PTU/hour</label>
+            <label><input type="radio" name="deployType" value="regional" /> Regional (T1) PTU — $2.00/PTU/hour</label>
+          </div>
+        </fieldset>
+        <table class="ref" aria-label="PTU pricing reference">
+          <thead>
+            <tr>
+              <th>Deployment</th>
+              <th>Hourly</th>
+              <th>Monthly Res.</th>
+              <th>Annual Res.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Global</td><td>$1.00/hr</td><td>$260/PTU/mo</td><td>$221/PTU/mo</td></tr>
+            <tr><td>Data Zone</td><td>$1.10/hr</td><td>$260/PTU/mo</td><td>$221/PTU/mo</td></tr>
+            <tr><td>Regional T1</td><td>$2.00/hr</td><td>$260/PTU/mo</td><td>$221/PTU/mo</td></tr>
+          </tbody>
+        </table>
+        <p class="warn-amber">⚠️ PTU is billed 24/7 when deployed, regardless of actual usage hours.</p>
+      </section>
+
+      <section class="step" id="step3">
+        <div class="step-header">
+          <span class="step-num">3</span>
+          <h2>Step 3: Set your expected growth</h2>
+        </div>
+        <div class="row">
+          <label for="growthSlider">Expected monthly usage growth rate: <span id="growthPctLabel">10%</span></label>
+          <input type="range" id="growthSlider" min="0" max="30" step="5" value="10" />
+        </div>
+        <fieldset class="inline">
+          <legend>Planning horizon</legend>
+          <div class="radios">
+            <label><input type="radio" name="horizon" value="6" /> 6 months</label>
+            <label><input type="radio" name="horizon" value="12" checked /> 12 months</label>
+            <label><input type="radio" name="horizon" value="24" /> 24 months</label>
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="step" id="step4">
+        <div class="step-header">
+          <span class="step-num">4</span>
+          <h2>Step 4: Your cost comparison</h2>
+        </div>
+        <div class="cards">
+          <div class="card-cost" id="cardPayg">
+            <h3>Serverless PAYG</h3>
+            <div class="amount" id="amtPayg">--</div>
+            <div class="sub">Usage-based. Cost grows with traffic.</div>
+            <div class="save" id="savePayg"></div>
+          </div>
+          <div class="card-cost" id="cardHourly">
+            <h3>PTU Hourly</h3>
+            <div class="amount" id="amtHourly">--</div>
+            <div class="sub">Dedicated capacity. Billed 24/7.</div>
+            <div class="save" id="saveHourly"></div>
+          </div>
+          <div class="card-cost" id="cardMonthlyRes">
+            <h3>PTU Monthly Reservation</h3>
+            <div class="amount" id="amtMonthlyRes">--</div>
+            <div class="sub">1-month commitment. Flexible.</div>
+            <div class="save" id="saveMonthlyRes"></div>
+          </div>
+          <div class="card-cost" id="cardAnnualRes" style="display:none;">
+            <h3>PTU Annual Reservation</h3>
+            <div class="amount" id="amtAnnualRes">--</div>
+            <div class="sub">Best rate. 12-month commitment.</div>
+            <div class="save" id="saveAnnualRes"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="step" id="step5">
+        <div class="step-header">
+          <span class="step-num">5</span>
+          <h2>Cumulative cost over time</h2>
+        </div>
+        <div class="chart-box">
+          <canvas id="costChart" aria-label="Cumulative cost chart"></canvas>
+        </div>
+        <div id="breakevenLabels" class="chart-breakeven-legend"></div>
+        <p id="summaryText" style="margin-top:1rem;font-size:0.9rem;color:var(--muted);white-space:pre-line;"></p>
+      </section>
+    </div>
+
+    <footer class="foot">
+      Prices based on Azure AI Foundry published rates, May 2026. PTU reservation pricing effective November 1, 2024. PTU count must be obtained from the Azure AI Foundry Capacity Calculator. DeepSeek and Llama prices are indicative — verify current rates at <a href="https://azure.microsoft.com" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">azure.microsoft.com</a> before purchasing.
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      const MODELS = [
+        { id: "gpt41", name: "GPT-4.1", ptu: true, inP: 2, outP: 8, note: "" },
+        { id: "gpt41mini", name: "GPT-4.1 mini", ptu: true, inP: 0.4, outP: 1.6, note: "" },
+        { id: "gpt41nano", name: "GPT-4.1 nano", ptu: true, inP: 0.1, outP: 0.4, note: "" },
+        {
+          id: "deepseek",
+          name: "DeepSeek-R1",
+          ptu: true,
+          inP: 0.55,
+          outP: 2.19,
+          note: "Azure Foundry price indicative — verify in portal",
+        },
+        {
+          id: "llama",
+          name: "Llama-3.3-70B",
+          ptu: true,
+          inP: 0.77,
+          outP: 0.77,
+          note: "Azure Foundry price indicative — verify in portal",
+        },
+        {
+          id: "claude",
+          name: "Claude Sonnet 4.5",
+          ptu: false,
+          inP: 3,
+          outP: 15,
+          note: "NO PTU",
+        },
+      ];
+
+      const TPM_MONTH_MINUTES = 30 * 24 * 60;
+
+      const HOURLY_RATES = { global: 1, datazone: 1.1, regional: 2 };
+      const MONTHLY_RES = 260;
+      const ANNUAL_RES_PER_MO = 221;
+
+      const el = {
+        modelSelect: document.getElementById("modelSelect"),
+        modelPricingLine: document.getElementById("modelPricingLine"),
+        modelIndicativeNote: document.getElementById("modelIndicativeNote"),
+        inputMm: document.getElementById("inputMm"),
+        outputMm: document.getElementById("outputMm"),
+        serverlessMonthly: document.getElementById("serverlessMonthly"),
+        claudeMessage: document.getElementById("claudeMessage"),
+        ptuSteps: document.getElementById("ptu-steps"),
+        tpmInput: document.getElementById("tpmInput"),
+        tpmOutput: document.getElementById("tpmOutput"),
+        ptuCount: document.getElementById("ptuCount"),
+        growthSlider: document.getElementById("growthSlider"),
+        growthPctLabel: document.getElementById("growthPctLabel"),
+      };
+
+      function fmtMoney(x) {
+        return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
+      }
+      function fmtMoney2(x) {
+        return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
+      }
+      /** TPM from monthly totals spread over full calendar month: (mm × 1e6) / (30 × 24 × 60). */
+      function tpmFromMonthlyMillions(monthlyMm) {
+        var tokens = monthlyMm * 1e6;
+        return tokens / TPM_MONTH_MINUTES;
+      }
+
+      MODELS.forEach(function (m) {
+        var o = document.createElement("option");
+        o.value = m.id;
+        o.textContent = m.name + (m.id === "claude" ? "" : "");
+        el.modelSelect.appendChild(o);
+      });
+
+      let chartInst = null;
+
+      function fmtPerMUsd(n) {
+        return (+n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function parseFieldNumber(inputEl) {
+        var s = String(inputEl.value).trim();
+        if (s === "") return null;
+        var n = Number(s);
+        if (!Number.isFinite(n) || n < 0) return null;
+        return n;
+      }
+
+      function normalizePtu(n) {
+        return Math.max(15, Math.round(n / 5) * 5);
+      }
+
+      function parseNormalizedPtu() {
+        var s = String(el.ptuCount.value).trim();
+        if (s === "") return null;
+        var n = Number(s);
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return normalizePtu(n);
+      }
+
+      /** Both monthly token millions fields have valid numbers only. */
+      function tokensEntered() {
+        return parseFieldNumber(el.inputMm) !== null && parseFieldNumber(el.outputMm) !== null;
+      }
+
+      function serverlessMonthlyForModel(mSel, inputMm, outputMm) {
+        return inputMm * mSel.inP + outputMm * mSel.outP;
+      }
+
+      function clearComparisonCards() {
+        ["amtPayg", "amtHourly", "amtMonthlyRes", "amtAnnualRes"].forEach(function (id) {
+          document.getElementById(id).textContent = "--";
+        });
+        ["savePayg", "saveHourly", "saveMonthlyRes", "saveAnnualRes"].forEach(function (id) {
+          document.getElementById(id).textContent = "";
+        });
+        ["cardPayg", "cardHourly", "cardMonthlyRes", "cardAnnualRes"].forEach(function (cid) {
+          var ce = document.getElementById(cid);
+          ce.classList.remove("best");
+          var badgeEl = ce.querySelector(".badge");
+          if (badgeEl) badgeEl.remove();
+        });
+        document.getElementById("breakevenLabels").innerHTML =
+          '<span style="color:var(--muted);font-variant-numeric:tabular-nums">--</span>';
+        document.getElementById("summaryText").textContent = "--";
+      }
+
+      function getHorizonMonths() {
+        var r = document.querySelector('input[name="horizon"]:checked');
+        return r ? +r.value : 12;
+      }
+      function getDeployType() {
+        var r = document.querySelector('input[name="deployType"]:checked');
+        return r ? r.value : "global";
+      }
+      function getGrowthRateFraction() {
+        return (+el.growthSlider.value || 0) / 100;
+      }
+      function selectedModel() {
+        return MODELS.find(function (x) { return x.id === el.modelSelect.value; }) || MODELS[0];
+      }
+
+      function paygMonthCost(monthIndexZeroBased, baseCost, g) {
+        return baseCost * Math.pow(1 + g, monthIndexZeroBased);
+      }
+
+      function totalPaygOverHorizon(months, baseCost, g) {
+        var t = 0;
+        for (var n = 0; n < months; n++) t += paygMonthCost(n, baseCost, g);
+        return t;
+      }
+
+      function cumulativePaygAtMonth(monthsElapsed, baseCost, g) {
+        return totalPaygOverHorizon(monthsElapsed, baseCost, g);
+      }
+
+      function ptuMonthlyHourlySpend(ptu, hourlyRate) {
+        return ptu * hourlyRate * 24 * 30;
+      }
+
+      /** Difference: cumulative PAYG − cumulative PTU capacity cost at month m (positive ⇒ PTU totals below PAYG totals). */
+      function paygMinusPtuCumulative(m, baseCost, g, ptuMonthlyFixed) {
+        return cumulativePaygAtMonth(m, baseCost, g) - ptuMonthlyFixed * m;
+      }
+
+      /**
+       * First month cumulative PTU is no worse than PAYG:
+       * d(1) ≥ 0 (PTU already winning at month-end 1), or first m≥2 where d crosses from negative → non‑negative,
+       * or d(m) ≈ 0.
+       */
+      function breakEvenMonth(monthsHorizon, baseCost, g, ptuMonthlyFixed) {
+        if (monthsHorizon < 1) return null;
+        function d(mm) {
+          return paygMinusPtuCumulative(mm, baseCost, g, ptuMonthlyFixed);
+        }
+        if (d(1) >= -1e-6) return 1;
+        for (var m = 2; m <= monthsHorizon; m++) {
+          var prev = d(m - 1);
+          var cur = d(m);
+          if (prev < -1e-6 && Math.abs(cur) < 1e-6) return m;
+          if (prev < 0 && cur >= 0) return m;
+        }
+        return null;
+      }
+
+      function destroyChart() {
+        if (chartInst) {
+          chartInst.destroy();
+          chartInst = null;
+        }
+      }
+
+      function render() {
+        var mSel = selectedModel();
+        el.modelPricingLine.textContent =
+          mSel.id === "claude"
+            ? "Pricing: Input $3.00/1M tokens | Output $15.00/1M tokens | NO PTU"
+            : "Pricing: Input $" + fmtPerMUsd(mSel.inP) + "/1M tokens | Output $" + fmtPerMUsd(mSel.outP) + "/1M tokens";
+        el.modelIndicativeNote.textContent = mSel.note === "NO PTU" ? "" : mSel.note || "";
+
+        var inputMm = parseFieldNumber(el.inputMm);
+        var outputMm = parseFieldNumber(el.outputMm);
+        var strongEl = el.serverlessMonthly.querySelector("strong");
+
+        var gPct = el.growthSlider.value;
+        el.growthPctLabel.textContent = gPct + "%";
+        var gf = getGrowthRateFraction();
+
+        if (!mSel.ptu) {
+          el.ptuSteps.classList.add("hidden");
+          el.claudeMessage.classList.add("visible");
+          el.claudeMessage.textContent =
+            "Claude models are billed through Azure Marketplace and do not support PTU. Serverless pricing only.";
+          if (inputMm === null || outputMm === null) {
+            strongEl.textContent = "--";
+          } else {
+            strongEl.textContent = fmtMoney2(serverlessMonthlyForModel(mSel, inputMm, outputMm));
+          }
+          destroyChart();
+          clearComparisonCards();
+          return;
+        }
+        el.ptuSteps.classList.remove("hidden");
+        el.claudeMessage.classList.remove("visible");
+
+        var tokEntered = tokensEntered();
+        if (!tokEntered) {
+          el.tpmInput.textContent = "--";
+          el.tpmOutput.textContent = "--";
+        } else {
+          el.tpmInput.textContent = Math.round(tpmFromMonthlyMillions(inputMm)).toLocaleString("en-US");
+          el.tpmOutput.textContent = Math.round(tpmFromMonthlyMillions(outputMm)).toLocaleString("en-US");
+        }
+
+        var ptuSnap = parseNormalizedPtu();
+        var allRequired = tokEntered && ptuSnap !== null;
+
+        if (!allRequired) {
+          strongEl.textContent = "--";
+          clearComparisonCards(false);
+          destroyChart();
+          return;
+        }
+
+        var base = serverlessMonthlyForModel(mSel, inputMm, outputMm);
+        strongEl.textContent = fmtMoney2(base);
+
+        var horizon = getHorizonMonths();
+        var ptu = ptuSnap;
+
+        var deploy = getDeployType();
+        var hourly = HOURLY_RATES[deploy === "global" ? "global" : deploy === "datazone" ? "datazone" : "regional"];
+
+        var paygTotal = totalPaygOverHorizon(horizon, base, gf);
+        var hourlyMonthly = ptuMonthlyHourlySpend(ptu, hourly);
+        var hourlyTotal = hourlyMonthly * horizon;
+        var monthlyResTotal = ptu * MONTHLY_RES * horizon;
+        var showAnnualCard = horizon >= 12;
+        var annualTotal = showAnnualCard ? ptu * ANNUAL_RES_PER_MO * horizon : 0;
+
+        var cardAnnual = document.getElementById("cardAnnualRes");
+        cardAnnual.style.display = showAnnualCard ? "" : "none";
+
+        document.getElementById("amtPayg").textContent = fmtMoney(paygTotal);
+        document.getElementById("amtHourly").textContent = fmtMoney(hourlyTotal);
+        document.getElementById("amtMonthlyRes").textContent = fmtMoney(monthlyResTotal);
+        document.getElementById("amtAnnualRes").textContent = fmtMoney(annualTotal);
+
+        function setSave(id, ptuTot) {
+          var diff = paygTotal - ptuTot;
+          var elSave = document.getElementById(id);
+          if (diff > 0) elSave.textContent = "Saves " + fmtMoney(diff) + " vs Serverless over " + horizon + " months";
+          else elSave.textContent = "Costs " + fmtMoney(-diff) + " more vs Serverless over " + horizon + " months";
+        }
+        document.getElementById("savePayg").textContent = "";
+        setSave("saveHourly", hourlyTotal);
+        setSave("saveMonthlyRes", monthlyResTotal);
+        if (showAnnualCard) setSave("saveAnnualRes", annualTotal);
+
+        var amounts = [
+          { key: "cardPayg", total: paygTotal },
+          { key: "cardHourly", total: hourlyTotal },
+          { key: "cardMonthlyRes", total: monthlyResTotal },
+        ];
+        if (showAnnualCard) amounts.push({ key: "cardAnnualRes", total: annualTotal });
+
+        var best = amounts.reduce(function (a, b) { return b.total < a.total ? b : a; });
+        amounts.forEach(function (a) {
+          var ce = document.getElementById(a.key);
+          ce.classList.remove("best");
+          var badgeEl = ce.querySelector(".badge");
+          if (badgeEl) badgeEl.remove();
+        });
+        var bestCard = document.getElementById(best.key);
+        bestCard.classList.add("best");
+        var bd = document.createElement("span");
+        bd.className = "badge";
+        bd.textContent = "✓ Best Value";
+        bestCard.insertBefore(bd, bestCard.querySelector(".sub"));
+
+        var beHourly = breakEvenMonth(horizon, base, gf, hourlyMonthly);
+        var beMonthly = breakEvenMonth(horizon, base, gf, ptu * MONTHLY_RES);
+        var beAnnual = showAnnualCard ? breakEvenMonth(horizon, base, gf, ptu * ANNUAL_RES_PER_MO) : null;
+
+        document.getElementById("breakevenLabels").innerHTML =
+          (beHourly
+            ? "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;'>PTU Hourly ↔ Serverless PAYG crosses at month <strong>" + beHourly + "</strong></span>"
+            : "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;color:var(--muted);'>PTU Hourly: no PAYG crossover within horizon</span>") +
+          (beMonthly
+            ? "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;'>Monthly Reservation ↔ PAYG crosses at month <strong>" + beMonthly + "</strong></span>"
+            : "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;color:var(--muted);'>Monthly Res.: no PAYG crossover within horizon</span>") +
+          (showAnnualCard
+            ? beAnnual
+              ? "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;'>Annual Reservation ↔ PAYG crosses at month <strong>" + beAnnual + "</strong></span>"
+              : "<span style='display:inline-block;margin:0 0.75rem 0.35rem 0;color:var(--muted);'>Annual Res.: no PAYG crossover within horizon</span>"
+            : "");
+
+        var monthlySentence =
+          beMonthly !== null
+            ? "PTU Monthly Reservation breaks even vs Serverless at month " + beMonthly + "."
+            : "PTU Monthly Reservation does not cross Serverless PAYG within " + horizon + " months.";
+        var summary =
+          "With " +
+          gPct +
+          "% monthly growth over " +
+          horizon +
+          " months:\n· " +
+          monthlySentence;
+        if (showAnnualCard) {
+          summary +=
+            annualTotal < paygTotal
+              ? "\n· PTU Annual Reservation saves " + fmtMoney(paygTotal - annualTotal) + " total vs Serverless."
+              : "\n· PTU Annual Reservation is not recommended for this " +
+                horizon +
+                "-month horizon (total reservation cost meets or exceeds PAYG).";
+        }
+        document.getElementById("summaryText").textContent = summary;
+
+        drawChart(horizon, base, gf, ptu, hourly, showAnnualCard, beHourly, beMonthly, showAnnualCard ? beAnnual : null);
+      }
+
+      function drawChart(horizon, baseCost, g, ptu, hourlyRate, showAnnual, beHourly, beMonthly, beAnnual) {
+        var labels = [];
+        for (var mi = 1; mi <= horizon; mi++) labels.push(mi.toString());
+
+        var dataPayg = labels.map(function (_, i) {
+          return cumulativePaygAtMonth(i + 1, baseCost, g);
+        });
+        var hourlyMo = ptuMonthlyHourlySpend(ptu, hourlyRate);
+        var dataHourly = labels.map(function (_, i) {
+          return hourlyMo * (i + 1);
+        });
+        var dataMonthlyRes = labels.map(function (_, i) {
+          return ptu * MONTHLY_RES * (i + 1);
+        });
+        var dataAnnualRes = showAnnual
+          ? labels.map(function (_, i) {
+              return ptu * ANNUAL_RES_PER_MO * (i + 1);
+            })
+          : null;
+
+        var bePlugin = {
+          id: "breakevenDots",
+          afterDatasetsDraw: function (chart) {
+            function drawIntersection(datasetIndex, beMonth, lineColor, labelYOffset) {
+              if (!beMonth || beMonth > horizon || beMonth < 1) return;
+              var meta = chart.getDatasetMeta(datasetIndex);
+              if (!meta.data[beMonth - 1]) return;
+              var point = meta.data[beMonth - 1];
+              var ctx = chart.ctx;
+              var yOff = typeof labelYOffset === "number" ? labelYOffset : 0;
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+              ctx.fillStyle = lineColor;
+              ctx.fill();
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = "#fff";
+              ctx.stroke();
+              ctx.font = "11px Segoe UI, sans-serif";
+              ctx.fillStyle = "#e6edf3";
+              ctx.textAlign = "left";
+              ctx.fillText("Break-even: Month " + beMonth, point.x + 10, point.y + yOff - 6);
+              ctx.restore();
+            }
+            drawIntersection(1, beHourly, "#fbbf24", 14);
+            drawIntersection(2, beMonthly, "#a855f7", 28);
+            if (showAnnual) drawIntersection(3, beAnnual, "#22d3ee", 42);
+          },
+        };
+
+        var ctx = document.getElementById("costChart").getContext("2d");
+        destroyChart();
+
+        var datasets = [
+          {
+            label: "Serverless PAYG",
+            data: dataPayg,
+            borderColor: "#0078d4",
+            backgroundColor: "rgba(0,120,212,0.12)",
+            fill: false,
+            tension: 0.22,
+          },
+          {
+            label: "PTU Hourly",
+            data: dataHourly,
+            borderColor: "#fbbf24",
+            stepped: false,
+            fill: false,
+            tension: 0,
+          },
+          {
+            label: "PTU Monthly Reservation",
+            data: dataMonthlyRes,
+            borderColor: "#a855f7",
+            tension: 0,
+            fill: false,
+          },
+        ];
+        if (showAnnual && dataAnnualRes) {
+          datasets.push({
+            label: "PTU Annual Reservation",
+            data: dataAnnualRes,
+            borderColor: "#22d3ee",
+            tension: 0,
+            fill: false,
+          });
+        }
+
+        chartInst = new Chart(ctx, {
+          type: "line",
+          data: { labels: labels, datasets: datasets },
+          plugins: [bePlugin],
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: { labels: { color: "#8b949e" } },
+            },
+            scales: {
+              x: {
+                grid: { color: "#30363d" },
+                ticks: { color: "#8b949e", maxTicksLimit: horizon > 12 ? 13 : undefined },
+                title: { display: true, text: "Month", color: "#8b949e" },
+              },
+              y: {
+                grid: { color: "#30363d" },
+                ticks: {
+                  color: "#8b949e",
+                  callback: function (v) {
+                    return "$" + (v >= 1e6 ? v / 1e6 + "M" : v / 1000 + "k");
+                  },
+                },
+                title: { display: true, text: "Cumulative cost (USD)", color: "#8b949e" },
+              },
+            },
+          },
+        });
+      }
+
+      function wire() {
+        el.modelSelect.addEventListener("change", render);
+        el.modelSelect.addEventListener("input", render);
+        el.inputMm.addEventListener("input", render);
+        el.outputMm.addEventListener("input", render);
+        el.ptuCount.addEventListener("input", render);
+        document.querySelectorAll('input[name="deployType"]').forEach(function (r) {
+          r.addEventListener("change", render);
+          r.addEventListener("input", render);
+        });
+        el.growthSlider.addEventListener("input", render);
+        document.querySelectorAll('input[name="horizon"]').forEach(function (r) {
+          r.addEventListener("change", render);
+          r.addEventListener("input", render);
+        });
+      }
+
+      wire();
+      render();
+    })();
+  </script>
+</body>
+</html>
