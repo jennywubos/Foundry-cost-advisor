@@ -3,75 +3,150 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Azure AI Foundry — PTU Commitment Advisor</title>
+  <title>Azure AI Foundry — Deployment Advisor</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #1a1a2e; color: #fff;
+      background: #1a1a2e;
+      color: #fff;
       min-height: 100vh;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
     }
     .top-bar {
       position: fixed; top: 0; left: 0; right: 0;
-      background: #0078d4; padding: 12px 24px;
-      font-size: 16px; font-weight: 600;
-      display: flex; align-items: center; gap: 10px;
+      background: #0078d4;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .logo { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 18px; }
-    .logo span { width: 8px; height: 8px; background: white; display: block; }
-    h1 { font-size: 28px; font-weight: 300; color: #c8c6c4; text-align: center; }
-    h1 strong { color: #fff; font-weight: 600; }
-    .cards { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+    .logo {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      width: 18px;
+    }
+    .logo span {
+      width: 8px; height: 8px;
+      background: white;
+      display: block;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 300;
+      color: #c8c6c4;
+      text-align: center;
+      line-height: 1.4;
+    }
+    h1 strong {
+      color: #fff;
+      font-weight: 600;
+    }
+    .cards {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
     .card {
-      background: #0f3460; border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px; padding: 32px; width: 280px;
-      text-decoration: none; color: #fff;
+      background: #0f3460;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 32px;
+      width: 300px;
+      text-decoration: none;
+      color: #fff;
       transition: border-color 0.2s, transform 0.2s;
-      display: flex; flex-direction: column; gap: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
-    .card:hover { border-color: #0078d4; transform: translateY(-4px); }
+    .card:hover {
+      border-color: #0078d4;
+      transform: translateY(-4px);
+    }
     .badge {
-      font-size: 11px; background: #0078d4;
-      padding: 2px 8px; border-radius: 12px; width: fit-content;
+      font-size: 11px;
+      background: #0078d4;
+      padding: 3px 10px;
+      border-radius: 12px;
+      width: fit-content;
+      letter-spacing: 0.3px;
     }
-    .card.v2 .badge { background: #107c10; }
-    .card h2 { font-size: 20px; }
-    .card p { font-size: 13px; color: #c8c6c4; line-height: 1.6; }
-    .arrow { color: #0078d4; font-size: 18px; margin-top: auto; }
-    footer { font-size: 12px; color: #605e5c; text-align: center; }
-    footer a { color: #8ba4c0; text-decoration: none; }
+    .card.v2 .badge {
+      background: #107c10;
+    }
+    .card h2 {
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .card p {
+      font-size: 13px;
+      color: #c8c6c4;
+      line-height: 1.7;
+    }
+    .arrow {
+      color: #0078d4;
+      font-size: 16px;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+    footer {
+      font-size: 12px;
+      color: #605e5c;
+      text-align: center;
+      line-height: 1.8;
+    }
+    footer a {
+      color: #8ba4c0;
+      text-decoration: none;
+    }
+    footer a:hover {
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+
   <div class="top-bar">
     <div class="logo">
       <span></span><span></span><span></span><span></span>
     </div>
-    Azure AI Foundry — PTU Commitment Advisor
+    Azure AI Foundry — Deployment Advisor
   </div>
 
-  <h1><strong>PTU Commitment Advisor</strong><br>Select a version</h1>
+  <h1><strong>Azure AI Foundry</strong><br>Deployment Advisor</h1>
 
   <div class="cards">
+
     <a class="card" href="./v1/">
       <span class="badge">v1 — Manual Input</span>
       <h2>Cost Calculator</h2>
-      <p>Enter your token volumes manually. Compare Standard, Priority Processing, and PTU pricing side by side.</p>
+      <p>Enter your token volumes manually. Compare Standard and Provisioned PTU — see which deployment type fits your workload and budget.</p>
       <span class="arrow">→ Open v1</span>
     </a>
+
     <a class="card v2" href="./v2/">
-      <span class="badge">v2 — Live Demo</span>
+      <span class="badge">v2 — API-Driven Demo</span>
       <h2>Commitment Advisor</h2>
-      <p>Sign in with a demo account. See real-time usage data, get AI-driven offer recommendation, and view 12-month cost projection.</p>
+      <p>Sign in to see your usage data in one view — quota, actual usage, cache rate, throttling, available capacity — and get a data-driven deployment type recommendation.</p>
       <span class="arrow">→ Open v2</span>
     </a>
+
   </div>
 
   <footer>
     <a href="https://github.com/jennywubos/Foundry-cost-advisor">github.com/jennywubos/Foundry-cost-advisor</a>
-    &nbsp;·&nbsp;Data mocked — goal is to validate the workflow, not the backend.
+    <br>
+    Data mocked — goal is to validate the workflow, not the backend.
   </footer>
+
 </body>
 </html>
