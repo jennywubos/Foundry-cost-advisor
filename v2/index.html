@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure AI Foundry — Cost Advisor</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --card: #0f3460;
+      --azure: #0078d4;
+      --azure-hover: #106ebe;
+      --success: #107c10;
+      --warning: #ca5010;
+      --danger: #a4262c;
+      --text: #ffffff;
+      --secondary: #c8c6c4;
+      --border: rgba(255, 255, 255, 0.08);
+      --teal: #00b294;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+    a { color: var(--azure); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .hidden { display: none !important; }
+
+    /* Top bar */
+    .topbar {
+      background: var(--azure);
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+    .topbar-logo { display: flex; gap: 2px; }
+    .topbar-logo span {
+      width: 7px; height: 7px; background: #fff; display: inline-block;
+    }
+    .topbar-center {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; opacity: 0.95;
+    }
+    .demo-badge { cursor: help; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; font-size: 13px; position: relative; }
+    .user-btn {
+      background: rgba(255,255,255,0.15);
+      border: none; color: #fff; padding: 6px 12px; border-radius: 4px;
+      cursor: pointer; font: inherit; display: flex; align-items: center; gap: 6px;
+    }
+    .user-btn:hover { background: rgba(255,255,255,0.25); }
+    .user-menu {
+      position: absolute; top: 100%; right: 0; margin-top: 6px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; min-width: 280px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 100; padding: 12px;
+    }
+    .user-menu .sub { color: var(--secondary); font-size: 12px; margin-top: 4px; word-break: break-all; }
+    .user-menu button.signout {
+      margin-top: 12px; width: 100%; padding: 8px; background: transparent;
+      border: 1px solid var(--border); color: var(--text); border-radius: 4px; cursor: pointer; font: inherit;
+    }
+    .user-menu button.signout:hover { background: rgba(255,255,255,0.06); }
+
+    /* Login */
+    #login-view {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: 100%; max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 40px 36px 32px;
+    }
+    .login-card .brand { text-align: center; margin-bottom: 28px; }
+    .login-card .brand svg { margin-bottom: 12px; }
+    .login-card h1 { font-size: 22px; font-weight: 600; }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 13px; color: var(--secondary); margin-bottom: 6px; }
+    .field input {
+      width: 100%; padding: 10px 12px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      font: inherit;
+    }
+    .field input:focus { outline: 2px solid var(--azure); outline-offset: 0; }
+    .login-error {
+      color: var(--danger); font-size: 13px; margin: -8px 0 14px; min-height: 20px;
+    }
+    .btn-primary {
+      width: 100%; padding: 12px; background: var(--azure); color: #fff;
+      border: none; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--azure-hover); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .demo-creds {
+      margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--secondary);
+    }
+    .demo-creds h3 { color: var(--text); font-size: 13px; margin-bottom: 10px; font-weight: 600; }
+    .demo-creds p { margin: 8px 0; }
+
+    /* Spinner overlay */
+    #auth-overlay {
+      position: fixed; inset: 0; background: rgba(26, 26, 46, 0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.35s;
+    }
+    #auth-overlay.visible { opacity: 1; pointer-events: auto; }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid var(--border);
+      border-top-color: var(--azure); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .auth-msg { margin-top: 16px; color: var(--secondary); }
+
+    /* Dashboard shell */
+    #app-main { display: none; flex-direction: column; min-height: 100vh; }
+    #app-main.visible { display: flex; }
+    .dash-body { flex: 1; padding: 24px 28px 40px; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+    h2.section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px;
+    }
+    @media (max-width: 1279px) {
+      .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .kpi-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px;
+    }
+    .kpi-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--secondary); }
+    .kpi-card .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+    .kpi-card .sub { font-size: 12px; color: var(--secondary); margin-top: 4px; }
+    .kpi-card .label-row { display: flex; align-items: center; gap: 6px; }
+    .info-tip { cursor: help; color: var(--azure); font-size: 12px; }
+
+    .color-good { color: var(--success); }
+    .color-warn { color: var(--warning); }
+    .color-bad { color: var(--danger); }
+
+    .capacity-block { margin-top: 8px; }
+    .capacity-note { font-size: 12px; color: var(--secondary); margin-bottom: 12px; }
+    .cap-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .cap-bar-wrap { flex: 1; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+    .cap-bar { height: 100%; border-radius: 4px; }
+    .cap-bar.azure { background: var(--azure); }
+    .cap-bar.teal { background: var(--teal); }
+
+    .spark-wrap { margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .spark-wrap h3 { font-size: 14px; margin-bottom: 8px; }
+    .spark-legend { display: flex; gap: 16px; font-size: 12px; color: var(--secondary); margin-bottom: 8px; flex-wrap: wrap; }
+    .spark-legend span { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 3px; border-radius: 1px; }
+    .spark-svg-wrap { width: 100%; overflow-x: auto; }
+
+    /* Advisor */
+    .rec-banner {
+      background: linear-gradient(135deg, var(--card), var(--surface));
+      border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 24px;
+    }
+    .rec-banner .tag { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--azure); margin-bottom: 8px; }
+    .rec-banner .headline { font-size: 16px; line-height: 1.5; }
+    .bullets { margin-top: 16px; }
+    .bullets h4 { font-size: 14px; margin-bottom: 10px; }
+    .bullets ul { padding-left: 20px; color: var(--secondary); font-size: 14px; }
+    .bullets li { margin-bottom: 10px; }
+    .sources-line { margin-top: 16px; font-size: 12px; color: var(--secondary); }
+
+    /* Comparison */
+    .compare-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;
+    }
+    @media (max-width: 1279px) { .compare-grid { grid-template-columns: 1fr; } }
+    .tier-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;
+      position: relative;
+    }
+    .tier-card.recommended {
+      border-color: var(--azure); box-shadow: 0 0 0 1px var(--azure), 0 8px 32px rgba(0, 120, 212, 0.25);
+    }
+    .badge-rec {
+      position: absolute; top: -10px; right: 16px;
+      background: var(--azure); color: #fff; font-size: 11px; font-weight: 700;
+      padding: 4px 10px; border-radius: 4px;
+    }
+    .tier-card h3 { font-size: 15px; margin-bottom: 4px; }
+    .tier-card .plan { font-size: 12px; color: var(--secondary); margin-bottom: 14px; }
+    .tier-card .price-lines { font-size: 13px; color: var(--secondary); margin-bottom: 14px; line-height: 1.6; }
+    .tier-card .features { font-size: 13px; list-style: none; }
+    .tier-card .features li { margin-bottom: 6px; padding-left: 0; }
+    .tier-card .monthly { margin-top: 16px; font-size: 18px; font-weight: 700; }
+    .tier-card .footnote { margin-top: 12px; font-size: 11px; color: var(--secondary); line-height: 1.5; }
+
+    details.ptu-calc { margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 16px; }
+    details.ptu-calc summary { cursor: pointer; padding: 14px 0; font-weight: 600; font-size: 14px; }
+    details.ptu-calc .inner { padding-bottom: 16px; font-size: 13px; color: var(--secondary); }
+    details.ptu-calc pre { white-space: pre-wrap; font-family: inherit; line-height: 1.7; }
+    details.ptu-calc a { word-break: break-all; }
+
+    .proj-table-wrap { overflow-x: auto; margin-bottom: 20px; }
+    table.proj { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.proj th, table.proj td { border: 1px solid var(--border); padding: 10px 12px; text-align: right; }
+    table.proj th:first-child, table.proj td:first-child { text-align: left; }
+    table.proj thead { background: var(--surface); }
+    .proj-note { font-size: 12px; color: var(--secondary); margin-top: 8px; }
+
+    .bar-chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 32px; }
+    .bar-chart-wrap h3 { font-size: 14px; margin-bottom: 12px; }
+
+    footer {
+      border-top: 1px solid var(--border); padding: 20px 28px; font-size: 12px; color: var(--secondary);
+      max-width: 1400px; margin: 0 auto; width: 100%;
+    }
+    footer p { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <div id="login-view">
+    <div class="login-card">
+      <div class="brand">
+        <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2" y="2" width="12" height="12" fill="#f25022"/>
+          <rect x="18" y="2" width="12" height="12" fill="#7fba00"/>
+          <rect x="2" y="18" width="12" height="12" fill="#00a4ef"/>
+          <rect x="18" y="18" width="12" height="12" fill="#ffb900"/>
+        </svg>
+        <h1>Azure AI Foundry</h1>
+      </div>
+      <div class="field">
+        <label for="email">Email address</label>
+        <input type="email" id="email" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" />
+      </div>
+      <div class="login-error" id="login-error" aria-live="polite"></div>
+      <button type="button" class="btn-primary" id="btn-signin">Sign in</button>
+      <div class="demo-creds">
+        <h3>Demo credentials:</h3>
+        <p>📧 sarah.chen@contoso.com / Demo2024!<br />→ Contoso Legal — Priority Processing demo</p>
+        <p>📧 james.okonkwo@fabricam.com / Demo2024!<br />→ Fabricam Financial — PTU demo</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="auth-overlay">
+    <div class="spinner"></div>
+    <p class="auth-msg">Signing you in...</p>
+  </div>
+
+  <div id="app-main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-logo" aria-hidden="true">
+          <span></span><span></span><br /><span></span><span></span>
+        </div>
+        <span>Azure AI Foundry</span>
+      </div>
+      <div class="topbar-center">
+        <span class="demo-badge" id="demo-tooltip-anchor" title="Real data available via Azure Monitor API — see commented code in source">🔴 Demo Mode — Mock Data ⓘ</span>
+      </div>
+      <div class="topbar-right" style="display:flex;align-items:center;gap:12px">
+        <button type="button" class="user-btn" id="user-menu-btn"><span id="topbar-user-name">User</span> ▾</button>
+        <button type="button" class="user-btn" id="btn-signout-top" style="background:transparent;border:1px solid rgba(255,255,255,0.35)">Sign out</button>
+        <div class="user-menu hidden" id="user-menu">
+          <div id="menu-user-full"></div>
+          <div class="sub" id="menu-subscription"></div>
+          <button type="button" class="signout" id="btn-signout">Sign out</button>
+        </div>
+      </div>
+    </header>
+    <div class="dash-body" id="dash-body"></div>
+    <footer id="app-footer"></footer>
+  </div>
+
+  <script>
+(function () {
+  'use strict';
+
+  /* GPT-4.1 Global Standard / Priority / PTU — https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/
+   * PTU TPM/output ratio — https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/provisioned-throughput-onboarding */
+  const PRICING = {
+    standard: {
+      inputPer1M: 2.00,        // $/1M input — azure.microsoft.com/.../openai-service/
+      cachedInputPer1M: 0.50,
+      outputPer1M: 8.00,
+    },
+    priority: {
+      inputPer1M: 3.50,
+      cachedInputPer1M: 0.88,
+      outputPer1M: 14.00,
+    },
+    ptu: {
+      perPTUperMonth: 260,
+      annualDiscount: 0.15,
+      tpmPerPTU_input: 2500,
+      outputRatio: 4,
+    },
+  };
+
+  function calcMonthlyCost(monthlyInputM, monthlyOutputM, cacheRate, tier, peakInputTPM, peakOutputTPM) {
+    const p = PRICING[tier];
+    const cachedInputM = monthlyInputM * cacheRate;
+    const uncachedInputM = monthlyInputM * (1 - cacheRate);
+    if (tier === 'ptu') {
+      return PRICING.ptu.perPTUperMonth * calcRecommendedPTUs(peakInputTPM, peakOutputTPM);
+    }
+    return (uncachedInputM * p.inputPer1M)
+         + (cachedInputM * p.cachedInputPer1M)
+         + (monthlyOutputM * p.outputPer1M);
+  }
+
+  function calcRecommendedPTUs(peakInputTPM, peakOutputTPM) {
+    const effectiveInputTPM = peakInputTPM + (peakOutputTPM * PRICING.ptu.outputRatio);
+    const basePTUs = effectiveInputTPM / PRICING.ptu.tpmPerPTU_input;
+    return Math.ceil(basePTUs * 1.17);
+  }
+
+  function calc12MonthProjection(baseInputM, baseOutputM, cacheRate, peakInputTPM, peakOutputTPM) {
+    const ptuPTUs = calcRecommendedPTUs(peakInputTPM, peakOutputTPM);
+    return Array.from({ length: 12 }, (_, i) => {
+      const g = Math.pow(1.10, i);
+      const inputM = baseInputM * g;
+      const outputM = baseOutputM * g;
+      return {
+        month: i + 1,
+        standard: calcMonthlyCost(inputM, outputM, cacheRate, 'standard'),
+        priority: calcMonthlyCost(inputM, outputM, cacheRate, 'priority'),
+        ptuMonthly: ptuPTUs * PRICING.ptu.perPTUperMonth,
+        ptuAnnual: ptuPTUs * PRICING.ptu.perPTUperMonth * (1 - PRICING.ptu.annualDiscount),
+      };
+    });
+  }
+
+  const OFFER_CONTEXT = {
+    priorityProcessing: {
+      // learn.microsoft.com/.../priority-processing
+      designTarget: "Pay-as-you-go simplicity with no long-term commitments. Business-hour or bursty traffic that benefits from scalable, cost-efficient performance.",
+      quotaBehavior: "Priority processing uses the same quota as standard processing — no separate capacity pool. Requests are routed with higher priority than Standard in the shared queue.",
+      latencyBenefit: "Consistent, low latency for responsive user experiences (p50 latency SLA per 5-minute window).",
+      limitation: "Long context requests exceeding 128k prompt tokens are downgraded to standard processing at standard rates.",
+      sources: [
+        { label: "Enable priority processing — Microsoft Learn", url: "https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/priority-processing" },
+        { label: "What's new in Microsoft Foundry Oct–Nov 2025", url: "https://devblogs.microsoft.com/foundry/whats-new-in-microsoft-foundry-oct-nov-2025/" },
+      ],
+    },
+    ptu: {
+      // learn.microsoft.com/.../provisioned-throughput-onboarding ; pricing: azure.microsoft.com/.../openai-service/
+      designTarget: "Provisioned deployments are recommended for workloads with consistent usage that require predictable latency and throughput.",
+      sla: "PTU provides a dedicated GPU lane: latency and throughput are guaranteed within purchased capacity. Traffic exceeding purchased PTUs overflows to standard (pay-as-you-go) at standard rates.",
+      cacheBenefit: "For Provisioned deployment types, cached tokens receive up to 100% discount on input tokens — enabling up to 2× throughput at the same PTU cost when 50% cache match rate is achieved.",
+      billingModel: "Billing is based on PTU-hours, not tokens — cost is fixed regardless of token volume. Monthly, annual (15% discount), and hourly options available.",
+      sources: [
+        { label: "Provisioned throughput onboarding — Microsoft Learn", url: "https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/provisioned-throughput-onboarding" },
+        { label: "Azure OpenAI pricing", url: "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/" },
+      ],
+    },
+    cacheNote: {
+      // learn.microsoft.com/.../prompt-caching ; Q&A on global routing: learn.microsoft.com/en-us/answers/questions/2154181/...
+      globalStandardWarning: "On Global Standard deployments, prompt caching hit rates are typically low (1–5%) due to dynamic request routing across global infrastructure. Cache hits are not guaranteed — requests are routed based on a hash of the prompt prefix and may land on different servers with empty caches.",
+      provisioned: "PTU deployments retain cache on dedicated infrastructure — up to 100% cache discount and significantly higher hit rates achievable with prefix-stable prompts.",
+      sources: [
+        { label: "Prompt caching — Microsoft Learn", url: "https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/prompt-caching" },
+      ],
+    },
+  };
+
+  function generateRecommendation(user, data) {
+    const throttleHigh = data.throttledCallsPct > 0.05;
+    const throttleMod = data.throttledCallsPct > 0.01;
+    const quotaHigh = (data.quotaAllocatedTPM / data.quotaLimitTPM) > 0.50;
+    const cacheVeryLow = data.cacheMatchRate < 0.05;
+    const cacheLow = data.cacheMatchRate < 0.20;
+    const workloadSpiky = data.workloadPattern === 'spiky';
+    const workload247 = data.workloadPattern === '247';
+
+    let priorityScore = 0, ptuScore = 0;
+
+    if (workloadSpiky) priorityScore += 3;
+    if (throttleHigh) priorityScore += 3;
+    if (!quotaHigh) priorityScore += 1;
+    if (cacheLow) priorityScore += 1;
+
+    if (workload247) ptuScore += 3;
+    if (quotaHigh) ptuScore += 3;
+    if (throttleMod) ptuScore += 1;
+    if (!workloadSpiky) ptuScore += 1;
+
+    const recommendation = ptuScore > priorityScore ? 'ptu' : 'priority';
+
+    let headline = '';
+    const bullets = [];
+
+    if (recommendation === 'priority') {
+      headline = `Your usage pattern — ${(data.throttledCallsPct * 100).toFixed(1)}% throttle rate during business hours with variable overnight volume — matches the design target for Priority Processing: "${OFFER_CONTEXT.priorityProcessing.designTarget}"`;
+
+      if (throttleHigh) {
+        bullets.push(`${(data.throttledCallsPct * 100).toFixed(1)}% throttled calls (last 30 days) → Standard is blocking users at peak. Priority Processing routes your requests ahead of Standard in the shared queue — no capacity reservation required. (${OFFER_CONTEXT.priorityProcessing.quotaBehavior})`);
+      }
+      if (workloadSpiky) {
+        bullets.push(`Spiky workload (business hours only, ~${data.workingHoursPerMonth} hrs/month) → PTU dedicated capacity would sit unused overnight. Priority Processing is PAYG — you only pay for tokens consumed.`);
+      }
+      if (cacheVeryLow) {
+        bullets.push(`${(data.cacheMatchRate * 100).toFixed(0)}% cache match rate → consistent with Global Standard behavior: "${OFFER_CONTEXT.cacheNote.globalStandardWarning.split('.')[0]}." Each legal contract is unique, further reducing reuse. PTU economics strengthen significantly above 40% cache rate — not achievable here without workload restructuring.`);
+      }
+      bullets.push(`Same PAYG billing model as Standard, no commitment — but with p50 latency SLA per 5-minute window. ${OFFER_CONTEXT.priorityProcessing.latencyBenefit}`);
+      bullets.push(`No need to forecast monthly token volume for PTU sizing. Priority Processing scales with actual usage — critical for unpredictable caseload.`);
+
+    } else {
+      headline = `Your consistent 24/7 workload at ${((data.quotaAllocatedTPM / data.quotaLimitTPM) * 100).toFixed(0)}% quota utilization matches the PTU design target: "${OFFER_CONTEXT.ptu.designTarget}"`;
+
+      if (quotaHigh) {
+        bullets.push(`${((data.quotaAllocatedTPM / data.quotaLimitTPM) * 100).toFixed(0)}% quota utilization → approaching the Standard TPM rate limit ceiling. PTU provides dedicated capacity outside the shared quota pool, eliminating rate-limit risk as usage grows.`);
+      }
+      if (workload247) {
+        bullets.push(`24/7 consistent load → PTU dedicated GPU capacity is fully utilized around the clock. Unlike Standard, reserved throughput is never idle. ${OFFER_CONTEXT.ptu.billingModel}`);
+      }
+      if (cacheVeryLow) {
+        const projectedRPM = Math.round(data.peakRPM * 2);
+        bullets.push(`Current cache match rate: ${(data.cacheMatchRate * 100).toFixed(0)}% → opportunity: "${OFFER_CONTEXT.ptu.cacheBenefit}" A support chatbot with stable FAQ system prompts is a strong candidate for 40–50% cache rates on PTU, potentially doubling throughput to ~${projectedRPM} RPM at zero additional cost. (Source: Chris Hoder, Azure AI Foundry Ignite 2025 demo)`);
+      }
+
+      const ptus = calcRecommendedPTUs(data.peakInputTPM, data.peakOutputTPM);
+      bullets.push(`Foundry PTU calculator recommends ${ptus} PTUs for ${(data.peakInputTPM / 1e6).toFixed(2)}M peak input TPM → $${(ptus * PRICING.ptu.perPTUperMonth).toLocaleString(undefined, { maximumFractionDigits: 0 })}/month fixed cost. Not exposed to token price growth as volume scales.`);
+
+      bullets.push(`${OFFER_CONTEXT.ptu.sla}`);
+    }
+
+    return {
+      recommendation,
+      headline,
+      bullets,
+      sources: OFFER_CONTEXT[recommendation === 'ptu' ? 'ptu' : 'priorityProcessing'].sources,
+    };
+  }
+
+  const DEMO_USERS = {};
+
+  DEMO_USERS['sarah.chen@contoso.com'] = {
+    password: 'Demo2024!',
+    name: 'Sarah Chen',
+    initials: 'SC',
+    company: 'Contoso Legal',
+    subscriptionId: 'a1b2c3d4-xxxx-xxxx-xxxx-contoso0001',
+    subscriptionName: 'Contoso-Legal-Prod',
+    resourceGroup: 'rg-contoso-openai',
+    accountName: 'openai-contoso-eastus',
+    deployedModel: 'gpt-4.1-2025-04-14',
+    region: 'East US',
+  };
+
+  /* === REAL API: Azure AI Capacity API ===
+   * GET https://management.azure.com/subscriptions/{subscriptionId}
+   *     /providers/Microsoft.CognitiveServices/locations/{location}
+   *     /models?api-version=2024-10-01
+   * Auth: Bearer token — Azure AD / Microsoft Entra ID
+   *   In production: MSAL.js PublicClientApplication.loginPopup()
+   *   scope: "https://management.azure.com/.default"
+   *   (This is exactly how Azure AI Foundry portal authenticates users)
+   *
+   * async function fetchCapacity(token, subscriptionId, location) {
+   *   const res = await fetch(
+   *     `https://management.azure.com/subscriptions/${subscriptionId}`
+   *     + `/providers/Microsoft.CognitiveServices/locations/${location}`
+   *     + `/models?api-version=2024-10-01`,
+   *     { headers: { Authorization: `Bearer ${token}` } }
+   *   );
+   *   const data = await res.json();
+   *   // Filter to customer's deployed model only:
+   *   return data.value.filter(m => m.name === currentUser.deployedModel);
+   * }
+   * === END REAL API === */
+
+  const MOCK_DATA_SARAH = {
+    workloadPattern: 'spiky',
+    workingHoursPerMonth: 220,
+    peakRPM: 220,
+    peakInputTPM: 3344000,
+    peakOutputTPM: 22000,
+    outputTPM_30dayAvg: 19800,
+    avgPromptTokens: 15200,
+    avgCompletionTokens: 100,
+    cacheMatchRate: 0.03,
+    throttledCallsPct: 0.142,
+    avgLatencyMs: 1400,
+    quotaAllocatedTPM: 1000000,
+    quotaLimitTPM: 6000000,
+    monthlyInputTokensM: 44141,
+    monthlyOutputTokensM: 290,
+    capacity: [
+      { model: 'gpt-4.1-2025-04-14', type: 'Global Provisioned-Managed', availablePTUs: 340, totalPTUs: 500 },
+      { model: 'gpt-4.1-2025-04-14', type: 'Global Standard', availableTPM: 4200000, totalTPM: 6000000 },
+    ],
+  };
+
+  DEMO_USERS['james.okonkwo@fabricam.com'] = {
+    password: 'Demo2024!',
+    name: 'James Okonkwo',
+    initials: 'JO',
+    company: 'Fabricam Financial',
+    subscriptionId: 'b2c3d4e5-xxxx-xxxx-xxxx-fabricam001',
+    subscriptionName: 'Fabricam-Fin-Prod',
+    resourceGroup: 'rg-fabricam-openai',
+    accountName: 'openai-fabricam-eastus',
+    deployedModel: 'gpt-4.1-2025-04-14',
+    region: 'East US',
+  };
+
+  /* === REAL API: Azure Monitor Metrics API ===
+   * GET https://management.azure.com/subscriptions/{subscriptionId}
+   *     /resourceGroups/{resourceGroup}
+   *     /providers/Microsoft.CognitiveServices/accounts/{accountName}
+   *     /providers/microsoft.insights/metrics
+   *     ?api-version=2023-10-01
+   *     &metricnames=ProcessedPromptTokens,GeneratedCompletionTokens,
+   *                  CacheMatchRate,BlockedCalls,SuccessfulCalls
+   *     &timespan=P30D&interval=PT1H&aggregation=Total,Average
+   *
+   * IMPORTANT: Requires BOTH subscriptionId AND resourceGroup + accountName
+   *   (full ARM resource path). subscriptionId alone is NOT sufficient.
+   *
+   * Metric names for Foundry/Azure OpenAI:
+   *   ProcessedPromptTokens      → input tokens (split by deployment via dimensions)
+   *   GeneratedCompletionTokens  → output tokens
+   *   CacheMatchRate             → prompt cache hit rate (0.0–1.0) — 30-day avg
+   *   BlockedCalls               → 429 throttled requests
+   *   SuccessfulCalls            → 200 OK
+   *
+   * async function fetchMonitor(token, subscriptionId, rg, account, timespan='P30D') {
+   *   const base = `https://management.azure.com/subscriptions/${subscriptionId}`
+   *     + `/resourceGroups/${rg}`
+   *     + `/providers/Microsoft.CognitiveServices/accounts/${account}`;
+   *   const res = await fetch(
+   *     base + `/providers/microsoft.insights/metrics`
+   *       + `?api-version=2023-10-01`
+   *       + `&metricnames=ProcessedPromptTokens,GeneratedCompletionTokens,CacheMatchRate,BlockedCalls,SuccessfulCalls`
+   *       + `&timespan=${timespan}&interval=PT1H&aggregation=Total,Average`,
+   *     { headers: { Authorization: `Bearer ${token}` } }
+   *   );
+   *   return await res.json();
+   * }
+   * === END REAL API === */
+
+  const MOCK_DATA_JAMES = {
+    workloadPattern: '247',
+    workingHoursPerMonth: 720,
+    peakRPM: 220,
+    peakInputTPM: 3344000,
+    peakOutputTPM: 22000,
+    outputTPM_30dayAvg: 21500,
+    avgPromptTokens: 15200,
+    avgCompletionTokens: 100,
+    cacheMatchRate: 0.00,
+    throttledCallsPct: 0.021,
+    avgLatencyMs: 1400,
+    quotaAllocatedTPM: 3500000,
+    quotaLimitTPM: 6000000,
+    monthlyInputTokensM: 144461,
+    monthlyOutputTokensM: 950,
+    projectedCacheRateOnPTU: 0.50,
+    projectedRPMWithCache: 437,
+    projectedLatencyMs: 1100,
+    capacity: [
+      { model: 'gpt-4.1-2025-04-14', type: 'Global Provisioned-Managed', availablePTUs: 340, totalPTUs: 500 },
+      { model: 'gpt-4.1-2025-04-14', type: 'Global Standard', availableTPM: 2500000, totalTPM: 6000000 },
+    ],
+  };
+
+  /* === REAL API: Azure AI Foundry Quota API ===
+   * Subscription-level quota:
+   * GET https://management.azure.com/subscriptions/{subscriptionId}
+   *     /providers/Microsoft.CognitiveServices/locations/{location}
+   *     /usages?api-version=2024-10-01
+   *
+   * Deployment-level rate limits:
+   * GET https://management.azure.com/subscriptions/{subscriptionId}
+   *     /resourceGroups/{rg}
+   *     /providers/Microsoft.CognitiveServices/accounts/{account}
+   *     /deployments?api-version=2024-10-01
+   *   → properties.rateLimits[].count = TPM rate limit per deployment
+   *   → properties.sku.capacity = PTUs allocated (for PTU deployments)
+   *
+   * async function fetchQuota(token, subscriptionId, location) {
+   *   const res = await fetch(
+   *     `https://management.azure.com/subscriptions/${subscriptionId}`
+   *     + `/providers/Microsoft.CognitiveServices/locations/${location}`
+   *     + `/usages?api-version=2024-10-01`,
+   *     { headers: { Authorization: `Bearer ${token}` } }
+   *   );
+   *   return (await res.json()).value;
+   * }
+   * === END REAL API === */
+
+  const MOCK_DATA_BY_USER = {
+    'sarah.chen@contoso.com': MOCK_DATA_SARAH,
+    'james.okonkwo@fabricam.com': MOCK_DATA_JAMES,
+  };
+
+  function generateSpikeyHistory(d) {
+    return Array.from({ length: 60 }, (_, i) => {
+      const isBusy = (i >= 5 && i <= 22) || (i >= 35 && i <= 52);
+      const isThrottle = i === 14 || i === 48;
+      const rpm = isBusy ? d.peakRPM * (0.85 + Math.random() * 0.2)
+                         : d.peakRPM * (0.05 + Math.random() * 0.08);
+      return {
+        min: i,
+        rpm: Math.round(rpm),
+        inputTPM: Math.round(rpm * d.avgPromptTokens),
+        outputTPM: Math.round(rpm * d.avgCompletionTokens),
+        throttlePct: isThrottle ? 0.32 : (isBusy ? 0.08 + Math.random() * 0.06 : 0.001),
+        cacheRate: d.cacheMatchRate + (Math.random() - 0.5) * 0.01,
+      };
+    });
+  }
+
+  function generateSteadyHistory(d) {
+    return Array.from({ length: 60 }, (_, i) => {
+      const rpm = d.peakRPM * (0.92 + Math.random() * 0.1);
+      return {
+        min: i,
+        rpm: Math.round(rpm),
+        inputTPM: Math.round(rpm * d.avgPromptTokens),
+        outputTPM: Math.round(rpm * d.avgCompletionTokens),
+        throttlePct: d.throttledCallsPct * (0.8 + Math.random() * 0.4),
+        cacheRate: d.cacheMatchRate,
+      };
+    });
+  }
+
+  let currentUser = null;
+  let currentEmail = '';
+  let currentData = null;
+  let userMenuOpen = false;
+
+  function formatCompactNum(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (n >= 1e3) return Math.round(n / 1e3) + 'K';
+    return String(Math.round(n));
+  }
+
+  function cacheColor(rate) {
+    if (rate < 0.10) return 'color-bad';
+    if (rate < 0.30) return 'color-warn';
+    return 'color-good';
+  }
+
+  function throttleColor(pct) {
+    if (pct < 0.02) return 'color-good';
+    if (pct <= 0.10) return 'color-warn';
+    return 'color-bad';
+  }
+
+  function quotaColor(ratio) {
+    if (ratio < 0.50) return 'color-good';
+    if (ratio <= 0.80) return 'color-warn';
+    return 'color-bad';
+  }
+
+  function animateCount(el, target, formatter, duration) {
+    const start = performance.now();
+    const from = 0;
+    function frame(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = from + (target - from) * eased;
+      el.textContent = formatter(val);
+      if (t < 1) requestAnimationFrame(frame);
+      else el.textContent = formatter(target);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function drawSparkline(containerId, history) {
+    const W = 720;
+    const H = 140;
+    const padL = 40;
+    const padR = 16;
+    const padT = 12;
+    const padB = 28;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+
+    let maxIn = 0, maxOut = 0, maxThr = 0.35;
+    history.forEach(h => {
+      maxIn = Math.max(maxIn, h.inputTPM);
+      maxOut = Math.max(maxOut, h.outputTPM);
+      maxThr = Math.max(maxThr, h.throttlePct);
+    });
+    const maxY = Math.max(maxIn, maxOut * 50);
+
+    function xAt(i) {
+      return padL + (i / (history.length - 1)) * innerW;
+    }
+    function yIn(v) {
+      return padT + innerH * (1 - v / maxY);
+    }
+    function yOut(v) {
+      return padT + innerH * (1 - (v * 50) / maxY);
+    }
+    function yThr(p) {
+      return padT + innerH * (1 - p / maxThr);
+    }
+
+    let pathIn = '';
+    let pathOut = '';
+    history.forEach((h, i) => {
+      const x = xAt(i);
+      const yi = yIn(h.inputTPM);
+      const yo = yOut(h.outputTPM);
+      pathIn += (i === 0 ? 'M' : 'L') + x + ',' + yi + ' ';
+      pathOut += (i === 0 ? 'M' : 'L') + x + ',' + yo + ' ';
+    });
+
+    let pathThr = '';
+    history.forEach((h, i) => {
+      const x = xAt(i);
+      const y = yThr(h.throttlePct);
+      pathThr += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
+    });
+
+    let ticks = '';
+    history.forEach((h, i) => {
+      if (h.throttlePct > 0.20) {
+        const x = xAt(i);
+        ticks += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#a4262c" stroke-width="1" opacity="0.5"/>`;
+      }
+    });
+
+    const svg = `
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="60-minute usage sparkline">
+        <text x="${padL}" y="${H - 6}" fill="#c8c6c4" font-size="11">60 minutes ago</text>
+        <text x="${W - padR}" y="${H - 6}" fill="#c8c6c4" font-size="11" text-anchor="end">now</text>
+        ${ticks}
+        <path d="${pathThr.trim()}" fill="none" stroke="#a4262c" stroke-width="1.5" opacity="0.85"/>
+        <path d="${pathIn.trim()}" fill="none" stroke="#0078d4" stroke-width="2"/>
+        <path d="${pathOut.trim()}" fill="none" stroke="#00b294" stroke-width="2"/>
+      </svg>`;
+    document.getElementById(containerId).innerHTML = svg;
+  }
+
+  function sum(arr, key) {
+    return arr.reduce((a, r) => a + r[key], 0);
+  }
+
+  function drawBarChart(containerId, totals) {
+    const labels = ['Standard', 'Priority', 'PTU mo.', 'PTU annual'];
+    const keys = ['standard', 'priority', 'ptuMonthly', 'ptuAnnual'];
+    const colors = ['#6e6e6e', '#0078d4', '#00b294', '#107c10'];
+    const maxV = Math.max(...keys.map(k => totals[k]), 1);
+    const barW = 56;
+    const gap = 36;
+    const chartW = keys.length * (barW + gap) + 80;
+    const chartH = 220;
+    const baseY = chartH - 36;
+    const maxBarH = chartH - 72;
+
+    let rects = '';
+    keys.forEach((k, i) => {
+      const v = totals[k];
+      const h = maxBarH * (v / maxV);
+      const x = 56 + i * (barW + gap);
+      const y = baseY - h;
+      rects += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${colors[i]}" rx="4"/>`;
+      rects += `<text x="${x + barW / 2}" y="${baseY + 14}" fill="#c8c6c4" font-size="11" text-anchor="middle">${labels[i]}</text>`;
+      const money = '$' + Math.round(v).toLocaleString();
+      rects += `<text x="${x + barW / 2}" y="${y - 6}" fill="#ffffff" font-size="11" text-anchor="middle">${money}</text>`;
+    });
+
+    const svg = `<svg width="${chartW}" height="${chartH}" viewBox="0 0 ${chartW} ${chartH}" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`;
+    document.getElementById(containerId).innerHTML = svg;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderDashboard() {
+    const user = currentUser;
+    const data = currentData;
+    const rec = generateRecommendation(user, data);
+    const history = data.workloadPattern === 'spiky' ? generateSpikeyHistory(data) : generateSteadyHistory(data);
+    const projection = calc12MonthProjection(
+      data.monthlyInputTokensM,
+      data.monthlyOutputTokensM,
+      data.cacheMatchRate,
+      data.peakInputTPM,
+      data.peakOutputTPM
+    );
+    const ptus = calcRecommendedPTUs(data.peakInputTPM, data.peakOutputTPM);
+    const effectiveTPM = data.peakInputTPM + data.peakOutputTPM * PRICING.ptu.outputRatio;
+    const basePTUsRaw = effectiveTPM / PRICING.ptu.tpmPerPTU_input;
+
+    const costStd = calcMonthlyCost(data.monthlyInputTokensM, data.monthlyOutputTokensM, data.cacheMatchRate, 'standard');
+    const costPri = calcMonthlyCost(data.monthlyInputTokensM, data.monthlyOutputTokensM, data.cacheMatchRate, 'priority');
+    const costPtu = calcMonthlyCost(
+      data.monthlyInputTokensM,
+      data.monthlyOutputTokensM,
+      data.cacheMatchRate,
+      'ptu',
+      data.peakInputTPM,
+      data.peakOutputTPM
+    );
+
+    const totals = {
+      standard: sum(projection, 'standard'),
+      priority: sum(projection, 'priority'),
+      ptuMonthly: sum(projection, 'ptuMonthly'),
+      ptuAnnual: sum(projection, 'ptuAnnual'),
+    };
+
+    const m1 = projection[0];
+    const m6 = projection[5];
+    const m12 = projection[11];
+    const pctPriVsStdM1 = m1.standard > 0 ? ((m1.priority - m1.standard) / m1.standard) * 100 : 0;
+
+    const quotaPct = (data.quotaAllocatedTPM / data.quotaLimitTPM) * 100;
+    const capRows = data.capacity.filter(c => c.model === user.deployedModel);
+
+    const offerTitle = rec.recommendation === 'ptu' ? 'Provisioned PTU' : 'Priority Processing';
+    const offerIcon = rec.recommendation === 'ptu' ? '🏦' : '⚡';
+    const isJames = currentEmail === 'james.okonkwo@fabricam.com';
+
+    let capHtml = '';
+    capRows.forEach(row => {
+      if (row.availablePTUs != null) {
+        const pct = row.availablePTUs / row.totalPTUs;
+        capHtml += `<div class="cap-row"><span style="min-width:200px">${escapeHtml(row.model)}</span><span style="min-width:200px">${escapeHtml(row.type)}</span><div class="cap-bar-wrap"><div class="cap-bar azure" style="width:${(pct * 100).toFixed(0)}%"></div></div><span>${row.availablePTUs} / ${row.totalPTUs} PTUs available</span></div>`;
+      } else {
+        const pct = row.availableTPM / row.totalTPM;
+        capHtml += `<div class="cap-row"><span style="min-width:200px">${escapeHtml(row.model)}</span><span style="min-width:200px">${escapeHtml(row.type)}</span><div class="cap-bar-wrap"><div class="cap-bar teal" style="width:${(pct * 100).toFixed(0)}%"></div></div><span>${formatCompactNum(row.availableTPM)} / ${formatCompactNum(row.totalTPM)} TPM available</span></div>`;
+      }
+    });
+
+    const ptuCalcOpen = isJames ? ' open' : '';
+    const bulletsHtml = rec.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('');
+    const sourcesHtml = rec.sources.map(s => `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.label)}</a>`).join(' · ');
+
+    const dash = document.getElementById('dash-body');
+    dash.innerHTML = `
+      <h2 class="section-title">Your Current Usage — Global Standard | Last 30 days</h2>
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="label">Peak RPM</div><div class="value" data-kpi="peakrpm" data-target="${data.peakRPM}">0</div><div class="sub">peak, last hour</div></div>
+        <div class="kpi-card"><div class="label">Input TPM (peak)</div><div class="value" data-kpi="intpm" data-target="${data.peakInputTPM}">0</div><div class="sub">peak, last hour</div></div>
+        <div class="kpi-card"><div class="label">Output TPM</div><div class="value" data-kpi="outtpm" data-target="${data.peakOutputTPM}">0</div><div class="sub">peak, last hour</div></div>
+        <div class="kpi-card">
+          <div class="label-row"><span class="label">Cache match rate</span><span class="info-tip" title="On Global Standard deployments, prompt cache hit rates are typically 1–5% due to dynamic routing across global infrastructure. Requests may land on different servers with empty caches. Source: Azure OpenAI documentation">ⓘ</span></div>
+          <div class="value ${cacheColor(data.cacheMatchRate)}" data-kpi="cache" data-target="${data.cacheMatchRate}">0%</div><div class="sub">30-day avg</div>
+        </div>
+        <div class="kpi-card"><div class="label">Throttled calls</div><div class="value ${throttleColor(data.throttledCallsPct)}" data-kpi="throttle" data-target="${data.throttledCallsPct}">0%</div><div class="sub">30-day avg</div></div>
+        <div class="kpi-card"><div class="label">Quota used</div><div class="value ${quotaColor(data.quotaAllocatedTPM / data.quotaLimitTPM)}" data-kpi="quota" data-target="${quotaPct}">0%</div><div class="sub">30-day avg</div></div>
+      </div>
+
+      <div class="capacity-block">
+        <p class="capacity-note">Showing capacity for your model (${escapeHtml(user.deployedModel)}) in ${escapeHtml(user.region)}</p>
+        ${capHtml}
+      </div>
+
+      <div class="spark-wrap">
+        <h3>Throughput &amp; throttle (60 minutes)</h3>
+        <div class="spark-legend">
+          <span><span class="dot" style="background:#0078d4"></span> Input TPM</span>
+          <span><span class="dot" style="background:#00b294"></span> Output TPM (×50 scale)</span>
+          <span><span class="dot" style="background:#a4262c"></span> Throttle %</span>
+        </div>
+        <div class="spark-svg-wrap" id="spark-svg"></div>
+      </div>
+
+      <h2 class="section-title" style="margin-top:32px">Commitment advisor</h2>
+      <div class="rec-banner">
+        <div class="tag">${offerIcon} RECOMMENDED: ${escapeHtml(offerTitle)}</div>
+        <p class="headline">${escapeHtml(rec.headline)}</p>
+        <div class="bullets">
+          <h4>Why ${escapeHtml(offerTitle)} fits ${escapeHtml(user.company)}</h4>
+          <ul>${bulletsHtml}</ul>
+        </div>
+        <div class="sources-line">Sources: ${sourcesHtml}</div>
+      </div>
+
+      <h2 class="section-title">Plan comparison &amp; 12-month projection</h2>
+      <div class="compare-grid">
+        <div class="tier-card">
+          <h3>Standard (PAYG)</h3>
+          <p class="plan">Current plan</p>
+          <div class="price-lines">
+            $${PRICING.standard.inputPer1M.toFixed(2)}/1M input<br/>
+            $${PRICING.standard.cachedInputPer1M.toFixed(2)}/1M cached input<br/>
+            $${PRICING.standard.outputPer1M.toFixed(2)}/1M output
+          </div>
+          <ul class="features">
+            <li>❌ No SLA guarantee</li><li>❌ Throttle risk</li><li>❌ Dynamic routing</li>
+            <li>✅ No commitment</li><li>✅ Lowest base price</li>
+          </ul>
+          <div class="monthly">Monthly est: $${Math.round(costStd).toLocaleString()}</div>
+        </div>
+        <div class="tier-card ${rec.recommendation === 'priority' ? 'recommended' : ''}">
+          ${rec.recommendation === 'priority' ? '<span class="badge-rec">RECOMMENDED</span>' : ''}
+          <h3>Priority Processing</h3>
+          <p class="plan">${rec.recommendation === 'priority' ? 'RECOMMENDED' : 'Alternative'}</p>
+          <div class="price-lines">
+            $${PRICING.priority.inputPer1M.toFixed(2)}/1M input<br/>
+            $${PRICING.priority.cachedInputPer1M.toFixed(2)}/1M cached input<br/>
+            $${PRICING.priority.outputPer1M.toFixed(2)}/1M output
+          </div>
+          <ul class="features">
+            <li>✅ p50 latency SLA</li><li>✅ Priority queue</li><li>✅ No commitment</li>
+            <li>⚠️ Shared quota pool</li><li>✅ PAYG flexibility</li>
+          </ul>
+          <div class="monthly">Monthly est: $${Math.round(costPri).toLocaleString()}</div>
+        </div>
+        <div class="tier-card ${rec.recommendation === 'ptu' ? 'recommended' : ''}">
+          ${rec.recommendation === 'ptu' ? '<span class="badge-rec">RECOMMENDED</span>' : ''}
+          <h3>Provisioned PTU</h3>
+          <p class="plan">${rec.recommendation === 'ptu' ? 'RECOMMENDED' : 'Alternative'}</p>
+          <div class="price-lines">
+            $${PRICING.ptu.perPTUperMonth}/PTU/month<br/>
+            ${ptus} PTUs = $${Math.round(costPtu).toLocaleString()}/mo<br/>
+            <span style="opacity:0.85">Sized from peak TPM (see calculator)</span>
+          </div>
+          <ul class="features">
+            <li>✅ Dedicated GPU</li><li>✅ No throttle</li><li>✅ Predictable latency</li>
+            <li>✅ 100% cache discount</li><li>⚠️ Commitment required</li>
+          </ul>
+          <div class="monthly">Monthly est: $${Math.round(costPtu).toLocaleString()}</div>
+          ${isJames ? `<p class="footnote">*With 50% cache match rate on PTU (100% cache discount): throughput → ${data.projectedRPMWithCache} RPM (~2× baseline RPM), latency → ${data.projectedLatencyMs}ms. Source: Chris Hoder, Azure AI Foundry Ignite 2025</p>` : ''}
+        </div>
+      </div>
+
+      <details class="ptu-calc"${ptuCalcOpen}>
+        <summary>PTU sizing calculator</summary>
+        <div class="inner">
+          <p><strong>How we calculate ${ptus} PTUs:</strong></p>
+          <pre>Peak input TPM:     ${Math.round(data.peakInputTPM)}
+Peak output TPM:    ${Math.round(data.peakOutputTPM)} × ${PRICING.ptu.outputRatio} (output ratio for GPT-4.1)
+Effective input TPM:${Math.round(effectiveTPM)}
+TPM per PTU (GPT-4.1 Global Prov-Managed): ${PRICING.ptu.tpmPerPTU_input.toLocaleString()}
+Base PTUs needed:   ${basePTUsRaw.toFixed(2)}
++ 17% headroom:     ${ptus} PTUs ✓
+Source: Azure AI Foundry PTU calculator
+https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/provisioned-throughput-onboarding</pre>
+        </div>
+      </details>
+
+      <div class="proj-table-wrap">
+        <table class="proj">
+          <thead>
+            <tr><th></th><th>Month 1</th><th>Month 6</th><th>Month 12</th><th>12-Month total</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Standard (PAYG)</td><td>$${Math.round(m1.standard).toLocaleString()}</td><td>$${Math.round(m6.standard).toLocaleString()}</td><td>$${Math.round(m12.standard).toLocaleString()}</td><td>$${Math.round(totals.standard).toLocaleString()}</td></tr>
+            <tr><td>Priority Processing</td><td>$${Math.round(m1.priority).toLocaleString()} (+${pctPriVsStdM1.toFixed(0)}%)</td><td>$${Math.round(m6.priority).toLocaleString()}</td><td>$${Math.round(m12.priority).toLocaleString()}</td><td>$${Math.round(totals.priority).toLocaleString()}</td></tr>
+            <tr><td>PTU (monthly)</td><td>$${Math.round(m1.ptuMonthly).toLocaleString()}</td><td>$${Math.round(m6.ptuMonthly).toLocaleString()}</td><td>$${Math.round(m12.ptuMonthly).toLocaleString()}</td><td>$${Math.round(totals.ptuMonthly).toLocaleString()}</td></tr>
+            <tr><td>PTU (annual prepay)</td><td>$${Math.round(m1.ptuAnnual).toLocaleString()} (-15%)</td><td>$${Math.round(m6.ptuAnnual).toLocaleString()}</td><td>$${Math.round(m12.ptuAnnual).toLocaleString()}</td><td>$${Math.round(totals.ptuAnnual).toLocaleString()}</td></tr>
+          </tbody>
+        </table>
+        <p class="proj-note">Token-based rows assume 10% month-over-month growth. PTU is flat capacity pricing — no exposure to token volume growth.</p>
+      </div>
+
+      <div class="bar-chart-wrap">
+        <h3>12-month total cost comparison</h3>
+        <div id="bar-chart-svg"></div>
+      </div>
+    `;
+
+    document.querySelectorAll('[data-kpi]').forEach(el => {
+      const kind = el.getAttribute('data-kpi');
+      const target = parseFloat(el.getAttribute('data-target'));
+      if (kind === 'peakrpm') {
+        animateCount(el, target, v => String(Math.round(v)), 1400);
+      } else if (kind === 'intpm') {
+        animateCount(el, target, v => formatCompactNum(v), 1400);
+      } else if (kind === 'outtpm') {
+        animateCount(el, target, v => formatCompactNum(v), 1400);
+      } else if (kind === 'cache') {
+        animateCount(el, target, v => (v * 100).toFixed(0) + '%', 1400);
+      } else if (kind === 'throttle') {
+        animateCount(el, target, v => (v * 100).toFixed(1) + '%', 1400);
+      } else if (kind === 'quota') {
+        animateCount(el, target, v => v.toFixed(0) + '%', 1400);
+      }
+    });
+
+    const sparkHost = document.createElement('div');
+    sparkHost.id = 'spark-inner';
+    document.getElementById('spark-svg').appendChild(sparkHost);
+    drawSparkline('spark-inner', history);
+
+    const barHost = document.createElement('div');
+    barHost.id = 'bar-inner';
+    document.getElementById('bar-chart-svg').appendChild(barHost);
+    drawBarChart('bar-inner', totals);
+
+    document.getElementById('app-footer').innerHTML = `
+      <p>Data sources: Azure AI Capacity API · Azure Monitor Metrics API · Azure AI Foundry Quota API</p>
+      <p>I'm intentionally keeping data mocked — the goal is to validate the workflow, not the backend.</p>
+      <p>Priority Processing: learn.microsoft.com/en-us/azure/foundry/openai/concepts/priority-processing</p>
+      <p>PTU pricing: azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/</p>
+      <p>v2.0 | github.com/jennywubos/Foundry-cost-advisor | ← v1 (manual input)</p>
+    `;
+  }
+
+  function showLogin() {
+    document.getElementById('login-view').classList.remove('hidden');
+    document.getElementById('app-main').classList.remove('visible');
+    currentUser = null;
+    currentEmail = '';
+    currentData = null;
+  }
+
+  function showApp() {
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('app-main').classList.add('visible');
+    document.getElementById('topbar-user-name').textContent = currentUser.name;
+    document.getElementById('menu-user-full').innerHTML = '<strong>' + escapeHtml(currentUser.name) + '</strong>';
+    document.getElementById('menu-subscription').textContent = currentUser.subscriptionName + ' (' + currentUser.subscriptionId + ')';
+    renderDashboard();
+  }
+
+  document.getElementById('btn-signin').addEventListener('click', function () {
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+    const err = document.getElementById('login-error');
+    err.textContent = '';
+
+    const u = DEMO_USERS[email];
+    if (!u || u.password !== password) {
+      err.textContent = "That Microsoft account doesn't exist. Try another.";
+      return;
+    }
+
+    const overlay = document.getElementById('auth-overlay');
+    overlay.classList.add('visible');
+    document.getElementById('btn-signin').disabled = true;
+
+    setTimeout(function () {
+      overlay.classList.remove('visible');
+      document.getElementById('btn-signin').disabled = false;
+      currentUser = u;
+      currentEmail = email;
+      currentData = MOCK_DATA_BY_USER[email];
+      showApp();
+    }, 1200);
+  });
+
+  document.getElementById('user-menu').addEventListener('click', function (e) {
+    e.stopPropagation();
+  });
+
+  document.getElementById('user-menu-btn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    userMenuOpen = !userMenuOpen;
+    document.getElementById('user-menu').classList.toggle('hidden', !userMenuOpen);
+  });
+
+  document.addEventListener('click', function () {
+    userMenuOpen = false;
+    document.getElementById('user-menu').classList.add('hidden');
+  });
+
+  function doSignOut() {
+    document.getElementById('email').value = '';
+    document.getElementById('password').value = '';
+    document.getElementById('login-error').textContent = '';
+    showLogin();
+  }
+
+  document.getElementById('btn-signout').addEventListener('click', function (e) {
+    e.stopPropagation();
+    doSignOut();
+  });
+
+  document.getElementById('btn-signout-top').addEventListener('click', function (e) {
+    e.stopPropagation();
+    doSignOut();
+  });
+
+  document.getElementById('demo-tooltip-anchor').title = 'Real data available via Azure Monitor API — see commented code in source';
+})();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+In the KPI cards, change OUTPUT TPM sub-label from '30-day avg' to 'peak, last hour'. In calcRecommendedPTUs(), use peakInputTPM and peakOutputTPM directly from mock data instead of deriving from monthly averages. Update the PTU Sizing Calculator display to show 'Peak output TPM' accordingly.
