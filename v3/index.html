@@ -1257,6 +1257,9 @@
           state.deployType = e.target.value;
           refreshDashboard();
         });
+        document.getElementById('commitment-model').addEventListener('change', function () {
+          refreshDashboard();
+        });
         document.getElementById('sec-heatmap').addEventListener('change', function (e) {
           var t = e.target;
           if (t.type !== 'checkbox' || !t.dataset.hmModel) return;
