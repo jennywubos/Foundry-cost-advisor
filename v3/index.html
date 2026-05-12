@@ -933,89 +933,143 @@
         var avail = cap.availablePTUs;
         var total = cap.totalPTUs;
         var signal = getDemandSignal(avail, total);
-
-        if (avail === 0) {
-          return {
-            status: 'NO-GO',
-            color: '#a4262c',
-            message:
-              '❌ No PTUs available (0 remaining) in ' +
-              region +
-              ' for ' +
-              deployType +
-              ' (aggregated across models). Need ' +
-              reqPTU +
-              '. Alternatives: ' +
-              getAlternativeRegionsDeploy(deployType, reqPTU) +
-              '. Escalate to Azure Capacity Planning for ' +
-              region +
-              ' GPU expansion.',
-          };
-        }
+        var zPct = function (frac) {
+          return Math.round(frac * 100);
+        };
 
         if (avail < reqPTU) {
           return {
             status: 'NO-GO',
             color: '#a4262c',
             message:
-              '❌ Not enough capacity: only ' +
+              '❌ NO-GO — insufficient capacity. Only ' +
               avail +
               ' PTUs available in ' +
               region +
               ' for ' +
               deployType +
-              ', but ' +
+              ' (' +
               reqPTU +
-              ' requested. Alternatives: ' +
+              ' requested). Alternatives: ' +
               getAlternativeRegionsDeploy(deployType, reqPTU) +
-              '. Consider splitting across regions or reducing commitment size.',
+              '.',
           };
         }
 
-        var remainingPTUs = avail - reqPTU;
-        var remainingPct = total > 0 ? remainingPTUs / total : 0;
-        var zPct = Math.round(remainingPct * 100);
+        var buffer = total > 0 ? (avail - reqPTU) / total : 0;
+        var zb = zPct(buffer);
 
-        if (remainingPct > 0.3 && (signal === 'LOW' || signal === 'MEDIUM')) {
+        if (buffer < 0.1) {
+          return {
+            status: 'NO-GO',
+            color: '#a4262c',
+            message:
+              '❌ NO-GO — buffer too small, risk of capacity loss. ' +
+              avail +
+              ' PTUs available; only ' +
+              (avail - reqPTU) +
+              ' PTUs (' +
+              zb +
+              '% of pool) remain after this commitment (demand signal: ' +
+              signal +
+              ').',
+          };
+        }
+
+        if (signal === 'HIGH') {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ CAUTION — high demand, lock capacity now. ' +
+              avail +
+              ' PTUs available; buffer after commitment ' +
+              zb +
+              '% (demand HIGH: pre-commit pool ' +
+              zPct(avail / total) +
+              '% free).',
+          };
+        }
+
+        if (signal === 'CRITICAL') {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ CAUTION — extremely tight, act immediately. ' +
+              avail +
+              ' PTUs available; buffer after commitment ' +
+              zb +
+              '% (demand CRITICAL: pre-commit pool ' +
+              zPct(avail / total) +
+              '% free).',
+          };
+        }
+
+        if (signal === 'MEDIUM' && buffer >= 0.1 && buffer <= 0.3) {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ CAUTION — sufficient but tight. ' +
+              avail +
+              ' PTUs available; buffer after commitment ' +
+              zb +
+              '% (demand MEDIUM).',
+          };
+        }
+
+        if (signal === 'LOW' && buffer > 0.5) {
           return {
             status: 'GO',
             color: '#107c10',
             message:
-              '✅ ' +
+              '✅ GO — Demand LOW with buffer after commitment >50% (' +
+              zb +
+              '%). ' +
               avail +
-              ' PTUs available, ' +
-              remainingPTUs +
-              ' remaining after commitment (' +
-              zPct +
-              '%). Safe to commit.',
+              ' PTUs available; safe to commit.',
           };
         }
 
-        if (remainingPct < 0.1 || signal === 'CRITICAL') {
+        if ((signal === 'LOW' || signal === 'MEDIUM') && buffer > 0.3 && buffer <= 0.5) {
           return {
-            status: 'CAUTION',
-            color: '#ca5010',
+            status: 'GO',
+            color: '#107c10',
             message:
-              '⚠️ Extremely tight — only ' +
-              remainingPTUs +
-              ' PTUs remaining after commitment (' +
-              zPct +
-              '%).<br/>High risk of capacity loss. Deploy TODAY.',
+              '✅ GO — Demand ' +
+              signal +
+              ' with buffer after commitment 30–50% (' +
+              zb +
+              '%). ' +
+              avail +
+              ' PTUs available; safe to commit.',
           };
         }
 
-        if ((remainingPct >= 0.1 && remainingPct <= 0.3) || signal === 'HIGH') {
+        if (signal === 'LOW' && buffer >= 0.1 && buffer <= 0.3) {
           return {
-            status: 'CAUTION',
-            color: '#ca5010',
+            status: 'GO',
+            color: '#107c10',
             message:
-              '⚠️ ' +
+              '✅ GO — Demand LOW with buffer after commitment ' +
+              zb +
+              '%. ' +
               avail +
-              ' PTUs available but only ' +
-              remainingPTUs +
-              ' remaining after commitment (' +
-              zPct +
-              '%).<br/>Deploy immediately to lock capacity before signing.',
+              ' PTUs available; safe to commit.',
+          };
+        }
+
+        if (signal === 'MEDIUM' && buffer > 0.5) {
+          return {
+            status: 'GO',
+            color: '#107c10',
+            message:
+              '✅ GO — Demand MEDIUM with strong buffer after commitment (' +
+              zb +
+              '%). ' +
+              avail +
+              ' PTUs available; safe to commit.',
           };
         }
 
@@ -1023,15 +1077,11 @@
           status: 'CAUTION',
           color: '#ca5010',
           message:
-            '⚠️ ' +
-            avail +
-            ' PTUs available; ' +
-            remainingPTUs +
-            ' remaining after commitment (' +
-            zPct +
-            '%). Demand signal: ' +
+            '⚠️ CAUTION — review before commit. Demand ' +
             signal +
-            '. Validate in portal before signing.',
+            ', buffer after commitment ' +
+            zb +
+            '%. Validate in portal.',
         };
       }
 
