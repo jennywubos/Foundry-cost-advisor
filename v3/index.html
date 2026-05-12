@@ -930,16 +930,54 @@
           };
         }
         var signal = getDemandSignal(cap.availablePTUs, cap.totalPTUs);
-        var canDeploy = cap.availablePTUs >= requestedPTUs;
-        var pctFree = Math.round((cap.availablePTUs / cap.totalPTUs) * 100);
+        var avail = cap.availablePTUs;
+        var pctFree = Math.round((avail / cap.totalPTUs) * 100);
 
-        if (canDeploy && signal === 'LOW') {
+        if (avail === 0) {
+          return {
+            status: 'NO-GO',
+            color: '#a4262c',
+            message:
+              '❌ No PTUs available (0 remaining) in ' +
+              region +
+              ' for ' +
+              deployType +
+              ' (aggregated across models). Need ' +
+              requestedPTUs +
+              '. Alternatives: ' +
+              getAlternativeRegionsDeploy(deployType, requestedPTUs) +
+              '. Escalate to Azure Capacity Planning for ' +
+              region +
+              ' GPU expansion.',
+          };
+        }
+
+        if (avail < requestedPTUs) {
+          return {
+            status: 'NO-GO',
+            color: '#a4262c',
+            message:
+              '❌ Not enough capacity: only ' +
+              avail +
+              ' PTUs available in ' +
+              region +
+              ' for ' +
+              deployType +
+              ', but ' +
+              requestedPTUs +
+              ' requested. Alternatives: ' +
+              getAlternativeRegionsDeploy(deployType, requestedPTUs) +
+              '. Consider splitting across regions or reducing commitment size.',
+          };
+        }
+
+        if (signal === 'LOW') {
           return {
             status: 'GO',
             color: '#107c10',
             message:
               '✅ ' +
-              cap.availablePTUs +
+              avail +
               ' PTUs available (aggregated across models) in ' +
               region +
               ' for ' +
@@ -949,85 +987,67 @@
               '% of mocked physical pool free). Demand signal: LOW. Safe to commit. Recommended: Deploy hourly first to lock capacity → then purchase Annual Reservation.',
           };
         }
-        if (canDeploy && signal === 'MEDIUM') {
+
+        if (signal === 'MEDIUM') {
           return {
-            status: 'CAUTION',
-            color: '#ca5010',
+            status: 'GO',
+            color: '#107c10',
             message:
-              '⚠️ ' +
-              cap.availablePTUs +
-              ' PTUs available in ' +
+              '✅ ' +
+              avail +
+              ' PTUs cover the request in ' +
               region +
               ' for ' +
               deployType +
-              ' but demand is MEDIUM (' +
+              ' (' +
               pctFree +
-              '% remaining). Capacity may tighten. Recommended: Deploy immediately to lock capacity before signing.',
+              '% of pool free). Demand signal: MEDIUM — capacity is sufficient; demand is growing. Monitor and deploy soon to lock capacity before signing.',
           };
         }
-        if (canDeploy && signal === 'HIGH') {
+
+        if (signal === 'HIGH') {
           return {
             status: 'CAUTION',
             color: '#ca5010',
             message:
               '⚠️ ' +
-              cap.availablePTUs +
-              ' PTUs technically available in ' +
+              avail +
+              ' PTUs cover the request in ' +
               region +
               ' for ' +
               deployType +
-              ' but demand is HIGH. Risk of capacity loss before contract start. Deploy TODAY to lock capacity.',
+              ', but demand is HIGH. Enough capacity now — risk of losing it before contract start. Deploy immediately to lock capacity.',
           };
         }
-        if (canDeploy && signal === 'CRITICAL') {
+
+        if (signal === 'CRITICAL') {
           return {
             status: 'CAUTION',
             color: '#ca5010',
             message:
               '⚠️ ' +
-              cap.availablePTUs +
-              ' PTUs can cover the request in ' +
+              avail +
+              ' PTUs barely cover the request in ' +
               region +
               ' for ' +
               deployType +
-              ' but supply is CRITICAL (' +
+              ' (CRITICAL supply — ' +
               pctFree +
-              '% headroom). Deploy immediately to lock capacity; escalation advised.',
+              '% headroom). Deploy immediately before capacity is gone; escalation advised.',
           };
         }
-        if (!canDeploy && signal === 'CRITICAL') {
-          return {
-            status: 'NO-GO',
-            color: '#a4262c',
-            message:
-              '❌ ' +
-              region +
-              ' for ' +
-              deployType +
-              ' is at capacity (' +
-              cap.availablePTUs +
-              ' PTUs remaining aggregated across models; need ' +
-              requestedPTUs +
-              '). Alternatives: ' +
-              getAlternativeRegionsDeploy(deployType, requestedPTUs) +
-              '. Escalate to Azure Capacity Planning for ' +
-              region +
-              ' GPU expansion.',
-          };
-        }
+
         return {
-          status: 'INSUFFICIENT',
-          color: '#a4262c',
+          status: 'CAUTION',
+          color: '#ca5010',
           message:
-            '❌ Only ' +
-            cap.availablePTUs +
+            '⚠️ ' +
+            avail +
             ' PTUs available in ' +
             region +
             ' for ' +
             deployType +
-            ', but ' +
-            requestedPTUs +
-            ' requested. Consider splitting across regions or reducing commitment size.',
+            '. Demand class unclear — treat as CAUTION and validate in portal.',
         };
       }
 
@@ -1222,7 +1242,7 @@
         var parts = [];
         if (status === 'GO') parts.push('Proceed with deployment test then reservation.');
         else if (status === 'CAUTION') parts.push('Accelerate deployment to lock capacity; monitor demand.');
-        else if (status === 'NO-GO' || status === 'INSUFFICIENT') parts.push('Re-scope region or PTU count; engage Capacity Planning if blocked.');
+        else if (status === 'NO-GO') parts.push('Re-scope region or PTU count; engage Capacity Planning if blocked.');
         else parts.push('Adjust filters or deploy type to obtain capacity signal.');
         parts.push('Demand class: ' + signal + '.');
         parts.push('Headroom: ' + cap.availablePTUs + '/' + cap.totalPTUs + ' PTUs (aggregated mock).');
