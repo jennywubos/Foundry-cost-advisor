@@ -201,41 +201,6 @@
       cursor: pointer;
     }
     .filter-select:focus { outline: 2px solid var(--azure-blue); outline-offset: 0; }
-    .filter-legend {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-    .filter-group-deploy {
-      flex: 2;
-      min-width: min(100%, 420px);
-    }
-    .deploy-radio-group {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 8px 14px;
-      padding: 12px 14px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-    }
-    .deploy-radio-group label {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      font-size: 13px;
-      cursor: pointer;
-      line-height: 1.35;
-    }
-    .deploy-radio-group input[type="radio"] {
-      margin-top: 3px;
-      flex-shrink: 0;
-      accent-color: var(--azure-blue);
-    }
     .heatmap-models {
       margin-bottom: 16px;
       padding: 12px 14px;
@@ -544,9 +509,9 @@
           <label for="filter-region">Region</label>
           <select id="filter-region" class="filter-select" aria-label="Region"></select>
         </div>
-        <div class="filter-group field filter-group-deploy">
-          <span class="filter-legend" id="deploy-type-legend">Deploy type</span>
-          <div id="filter-deploy-radios" class="deploy-radio-group" role="radiogroup" aria-labelledby="deploy-type-legend"></div>
+        <div class="filter-group field">
+          <label for="filter-deploy">Deploy type</label>
+          <select id="filter-deploy" class="filter-select" aria-label="Deploy type"></select>
         </div>
       </div>
 
@@ -1181,7 +1146,7 @@
 
       function initFilterSelects() {
         var regSel = document.getElementById('filter-region');
-        var depBox = document.getElementById('filter-deploy-radios');
+        var depSel = document.getElementById('filter-deploy');
         if (!filterControlsPopulated) {
           filterControlsPopulated = true;
           ALL_REGIONS.forEach(function (r) {
@@ -1190,24 +1155,15 @@
             o.textContent = r;
             regSel.appendChild(o);
           });
-          ALL_DEPLOY_TYPES.forEach(function (d, idx) {
-            var id = 'deploy-opt-' + idx;
-            var lab = document.createElement('label');
-            var inp = document.createElement('input');
-            inp.type = 'radio';
-            inp.name = 'deploy-type';
-            inp.id = id;
-            inp.value = d;
-            lab.setAttribute('for', id);
-            lab.appendChild(inp);
-            lab.appendChild(document.createTextNode(d));
-            depBox.appendChild(lab);
+          ALL_DEPLOY_TYPES.forEach(function (d) {
+            var o = document.createElement('option');
+            o.value = d;
+            o.textContent = d;
+            depSel.appendChild(o);
           });
         }
         regSel.value = state.region;
-        depBox.querySelectorAll('input[name="deploy-type"]').forEach(function (inp) {
-          inp.checked = inp.value === state.deployType;
-        });
+        depSel.value = state.deployType;
       }
 
       function attachFilterListeners() {
@@ -1217,10 +1173,8 @@
           state.region = e.target.value;
           refreshDashboard();
         });
-        document.getElementById('filter-deploy-radios').addEventListener('change', function (e) {
-          var t = e.target;
-          if (t.name !== 'deploy-type' || t.type !== 'radio') return;
-          state.deployType = t.value;
+        document.getElementById('filter-deploy').addEventListener('change', function (e) {
+          state.deployType = e.target.value;
           refreshDashboard();
         });
         document.getElementById('sec-heatmap').addEventListener('change', function (e) {
