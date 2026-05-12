@@ -16,101 +16,90 @@
       align-items: center;
       justify-content: center;
       gap: 48px;
+      padding-top: 60px;
     }
     .top-bar {
       position: fixed; top: 0; left: 0; right: 0;
       background: #0078d4;
       padding: 12px 24px;
-      font-size: 16px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      font-size: 16px; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+      z-index: 100;
     }
-    .logo {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      width: 18px;
-    }
-    .logo span {
-      width: 8px; height: 8px;
-      background: white;
-      display: block;
-    }
-    h1 {
-      font-size: 32px;
-      font-weight: 300;
-      color: #c8c6c4;
-      text-align: center;
-      line-height: 1.4;
-    }
-    h1 strong {
-      color: #fff;
-      font-weight: 600;
-    }
-    .cards {
-      display: flex;
-      gap: 32px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+    .logo { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 18px; }
+    .logo span { width: 8px; height: 8px; background: white; display: block; }
+    h1 { font-size: 32px; font-weight: 300; color: #c8c6c4; text-align: center; line-height: 1.4; }
+    h1 strong { color: #fff; font-weight: 600; }
+    .cards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+    /* v1 and v2 — smaller */
     .card {
       background: #0f3460;
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 8px;
-      padding: 32px;
-      width: 300px;
+      padding: 28px;
+      width: 260px;
       text-decoration: none;
       color: #fff;
       transition: border-color 0.2s, transform 0.2s;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+      display: flex; flex-direction: column; gap: 12px;
     }
-    .card:hover {
-      border-color: #0078d4;
-      transform: translateY(-4px);
+    .card:hover { border-color: #0078d4; transform: translateY(-4px); }
+
+    /* v3 — featured, larger */
+    .card.v3 {
+      width: 320px;
+      padding: 36px;
+      border: 2px solid #0078d4;
+      box-shadow: 0 0 24px rgba(0,120,212,0.3);
+      position: relative;
     }
-    .badge {
-      font-size: 11px;
+    .card.v3:hover { border-color: #60cdff; box-shadow: 0 0 32px rgba(0,120,212,0.5); transform: translateY(-6px); }
+
+    .featured-label {
+      position: absolute;
+      top: -14px; left: 50%; transform: translateX(-50%);
       background: #0078d4;
-      padding: 3px 10px;
-      border-radius: 12px;
-      width: fit-content;
-      letter-spacing: 0.3px;
-    }
-    .card.v2 .badge {
-      background: #107c10;
-    }
-    .card h2 {
-      font-size: 22px;
-      font-weight: 600;
-    }
-    .card p {
-      font-size: 13px;
-      color: #c8c6c4;
-      line-height: 1.7;
-    }
-    .arrow {
-      color: #0078d4;
-      font-size: 16px;
-      margin-top: auto;
-      padding-top: 8px;
-    }
-    footer {
-      font-size: 12px;
-      color: #605e5c;
-      text-align: center;
-      line-height: 1.8;
-    }
-    footer a {
-      color: #8ba4c0;
-      text-decoration: none;
-    }
-    footer a:hover {
       color: #fff;
+      font-size: 11px; font-weight: 700;
+      padding: 4px 16px;
+      border-radius: 12px;
+      letter-spacing: 1px;
+      white-space: nowrap;
     }
+    .featured-tagline {
+      font-size: 13px;
+      color: #60cdff;
+      font-style: italic;
+      line-height: 1.5;
+      border-left: 2px solid #0078d4;
+      padding-left: 10px;
+      margin: 4px 0;
+    }
+
+    .badge { font-size: 11px; background: #16213e; border: 1px solid rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 12px; width: fit-content; }
+    .card.v3 .badge { background: #0078d4; border: none; }
+    .card.v2 .badge { background: #107c10; border: none; }
+
+    .card h2 { font-size: 20px; font-weight: 600; }
+    .card.v3 h2 { font-size: 24px; }
+    .card p { font-size: 13px; color: #c8c6c4; line-height: 1.7; }
+    .card.v3 p { font-size: 14px; }
+
+    .features { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .features li { font-size: 12px; color: #c8c6c4; display: flex; align-items: flex-start; gap: 8px; }
+    .features li::before { content: '✓'; color: #0078d4; font-weight: 700; flex-shrink: 0; }
+
+    .arrow { color: #0078d4; font-size: 15px; margin-top: auto; padding-top: 8px; }
+    .card.v3 .arrow { font-size: 17px; color: #60cdff; }
+
+    footer { text-align: center; line-height: 2; padding-bottom: 24px; }
+    .builder { color: #ffffff; font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .builder a { color: #ffffff; text-decoration: none; }
+    .builder a:hover { text-decoration: underline; }
+    .repo a { color: #60cdff; font-size: 13px; text-decoration: none; }
+    .repo a:hover { color: #ffffff; }
+    .note { color: #c8c6c4; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -126,6 +115,7 @@
 
   <div class="cards">
 
+    <!-- v1 -->
     <a class="card" href="./v1/">
       <span class="badge">v1 — Manual Input</span>
       <h2>Cost Calculator</h2>
@@ -133,6 +123,24 @@
       <span class="arrow">→ Open v1</span>
     </a>
 
+    <!-- v3 — FEATURED -->
+    <a class="card v3" href="./v3/">
+      <span class="featured-label">⭐ FEATURED — INTERNAL TOOL</span>
+      <span class="badge">v3 — Capacity Dashboard</span>
+      <h2>Capacity & Commitment Dashboard</h2>
+      <p class="featured-tagline">Answers the question Sales asks before every large deal:<br>"Can we actually commit to this?"</p>
+      <p>Microsoft-internal operational dashboard for Sales, CSA, and Capacity Planning teams.</p>
+      <ul class="features">
+        <li>Real-time PTU availability across regions</li>
+        <li>GO / CAUTION / NO-GO commitment readiness</li>
+        <li>Cross-region demand signal for GPU expansion</li>
+        <li>PTU deployed vs utilized stack view</li>
+        <li>Standard actual usage (no quota)</li>
+      </ul>
+      <span class="arrow">→ Open v3</span>
+    </a>
+
+    <!-- v2 -->
     <a class="card v2" href="./v2/">
       <span class="badge">v2 — API-Driven Demo</span>
       <h2>Commitment Advisor</h2>
@@ -142,15 +150,17 @@
 
   </div>
 
-
   <footer>
-    <div style="color:#ffffff; font-size:14px; font-weight:600; margin-bottom:8px;">
+    <div class="builder">
       Builder: Jenny Wu &nbsp;|&nbsp;
-      <a href="mailto:JennyWuBos@gmail.com" style="color:#ffffff;">JennyWuBos@gmail.com</a>
+      <a href="mailto:JennyWuBos@gmail.com">JennyWuBos@gmail.com</a>
     </div>
-    <a href="https://github.com/jennywubos/Foundry-cost-advisor">github.com/jennywubos/Foundry-cost-advisor</a>
-    <br>
-    Data intentionally mocked — goal is to validate the workflow, not the backend.
+    <div class="repo">
+      <a href="https://github.com/jennywubos/Foundry-cost-advisor">github.com/jennywubos/Foundry-cost-advisor</a>
+    </div>
+    <div class="note">
+      Data intentionally mocked — goal is to validate the workflow, not the backend.
+    </div>
   </footer>
 
 </body>
