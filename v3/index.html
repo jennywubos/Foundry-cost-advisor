@@ -201,6 +201,41 @@
       cursor: pointer;
     }
     .filter-select:focus { outline: 2px solid var(--azure-blue); outline-offset: 0; }
+    .filter-legend {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .filter-group-deploy {
+      flex: 2;
+      min-width: min(100%, 420px);
+    }
+    .deploy-radio-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px 14px;
+      padding: 12px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .deploy-radio-group label {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      line-height: 1.35;
+    }
+    .deploy-radio-group input[type="radio"] {
+      margin-top: 3px;
+      flex-shrink: 0;
+      accent-color: var(--azure-blue);
+    }
     .heatmap-models {
       margin-bottom: 16px;
       padding: 12px 14px;
@@ -509,9 +544,9 @@
           <label for="filter-region">Region</label>
           <select id="filter-region" class="filter-select" aria-label="Region"></select>
         </div>
-        <div class="filter-group field">
-          <label for="filter-deploy">Deploy type</label>
-          <select id="filter-deploy" class="filter-select" aria-label="Deploy type"></select>
+        <div class="filter-group field filter-group-deploy">
+          <span class="filter-legend" id="deploy-type-legend">Deploy type</span>
+          <div id="filter-deploy-radios" class="deploy-radio-group" role="radiogroup" aria-labelledby="deploy-type-legend"></div>
         </div>
       </div>
 
@@ -783,8 +818,10 @@
         // Representative mock — Data Zone + Regional PTU (same doc sources as global PTU mock)
         { region: 'East US', model: 'gpt-4o-mini', deployType: 'Data Zone Provisioned-managed', availablePTUs: 210, totalPTUs: 400 },
         { region: 'West Europe', model: 'gpt-4.1-2025-04-14', deployType: 'Data Zone Provisioned-managed', availablePTUs: 95, totalPTUs: 350 },
-        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Provisioned-managed (Regional)', availablePTUs: 45, totalPTUs: 200 },
-        { region: 'Sweden Central', model: 'gpt-4o', deployType: 'Provisioned-managed (Regional)', availablePTUs: 70, totalPTUs: 220 },
+        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Provisioned-managed', availablePTUs: 45, totalPTUs: 200 },
+        { region: 'Sweden Central', model: 'gpt-4o', deployType: 'Provisioned-managed', availablePTUs: 70, totalPTUs: 220 },
+        { region: 'Japan East', model: 'gpt-4o-mini', deployType: 'Provisioned', availablePTUs: 55, totalPTUs: 180 },
+        { region: 'Australia East', model: 'gpt-4.1-2025-04-14', deployType: 'Provisioned', availablePTUs: 40, totalPTUs: 150 },
       ];
 
       function getDemandSignal(availablePTUs, totalPTUs) {
@@ -811,7 +848,8 @@
         { region: 'Sweden Central', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-managed', totalDeployedPTUs: 110, avgUtilizationPct: 22, peakRPM: 45, throttledCallsPct: 0.001, cacheMatchRate: 0.45 },
         { region: 'Sweden Central', model: 'o4-mini', deployType: 'Global Provisioned-managed', totalDeployedPTUs: 55, avgUtilizationPct: 41, peakRPM: 200, throttledCallsPct: 0.006, cacheMatchRate: 0.08 },
         { region: 'East US', model: 'gpt-4o-mini', deployType: 'Data Zone Provisioned-managed', totalDeployedPTUs: 120, avgUtilizationPct: 55, peakRPM: 200, throttledCallsPct: 0.009, cacheMatchRate: 0.1 },
-        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Provisioned-managed (Regional)', totalDeployedPTUs: 90, avgUtilizationPct: 88, peakRPM: 150, throttledCallsPct: 0.014, cacheMatchRate: 0.05 },
+        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Provisioned-managed', totalDeployedPTUs: 90, avgUtilizationPct: 88, peakRPM: 150, throttledCallsPct: 0.014, cacheMatchRate: 0.05 },
+        { region: 'Japan East', model: 'gpt-4o-mini', deployType: 'Provisioned', totalDeployedPTUs: 72, avgUtilizationPct: 52, peakRPM: 95, throttledCallsPct: 0.011, cacheMatchRate: 0.02 },
       ];
 
       const MOCK_STANDARD_USAGE = [
@@ -850,16 +888,20 @@
       const ALL_DEPLOY_TYPES = [
         'Global Standard',
         'Data Zone Standard',
-        'Standard (Regional)',
+        'Standard',
+        'Global Batch',
+        'Data Zone Batch',
         'Global Provisioned-managed',
         'Data Zone Provisioned-managed',
-        'Provisioned-managed (Regional)',
+        'Provisioned-managed',
+        'Provisioned',
       ];
 
       const PTU_DEPLOY_TYPES = new Set([
         'Global Provisioned-managed',
         'Data Zone Provisioned-managed',
-        'Provisioned-managed (Regional)',
+        'Provisioned-managed',
+        'Provisioned',
       ]);
 
       const DEMO_USERS = {
@@ -1139,7 +1181,7 @@
 
       function initFilterSelects() {
         var regSel = document.getElementById('filter-region');
-        var depSel = document.getElementById('filter-deploy');
+        var depBox = document.getElementById('filter-deploy-radios');
         if (!filterControlsPopulated) {
           filterControlsPopulated = true;
           ALL_REGIONS.forEach(function (r) {
@@ -1148,15 +1190,24 @@
             o.textContent = r;
             regSel.appendChild(o);
           });
-          ALL_DEPLOY_TYPES.forEach(function (d) {
-            var o = document.createElement('option');
-            o.value = d;
-            o.textContent = d;
-            depSel.appendChild(o);
+          ALL_DEPLOY_TYPES.forEach(function (d, idx) {
+            var id = 'deploy-opt-' + idx;
+            var lab = document.createElement('label');
+            var inp = document.createElement('input');
+            inp.type = 'radio';
+            inp.name = 'deploy-type';
+            inp.id = id;
+            inp.value = d;
+            lab.setAttribute('for', id);
+            lab.appendChild(inp);
+            lab.appendChild(document.createTextNode(d));
+            depBox.appendChild(lab);
           });
         }
         regSel.value = state.region;
-        depSel.value = state.deployType;
+        depBox.querySelectorAll('input[name="deploy-type"]').forEach(function (inp) {
+          inp.checked = inp.value === state.deployType;
+        });
       }
 
       function attachFilterListeners() {
@@ -1166,8 +1217,10 @@
           state.region = e.target.value;
           refreshDashboard();
         });
-        document.getElementById('filter-deploy').addEventListener('change', function (e) {
-          state.deployType = e.target.value;
+        document.getElementById('filter-deploy-radios').addEventListener('change', function (e) {
+          var t = e.target;
+          if (t.name !== 'deploy-type' || t.type !== 'radio') return;
+          state.deployType = t.value;
           refreshDashboard();
         });
         document.getElementById('sec-heatmap').addEventListener('change', function (e) {
@@ -1294,7 +1347,7 @@
         var table = document.getElementById('heatmap-table');
         if (!PTU_DEPLOY_TYPES.has(state.deployType)) {
           table.innerHTML =
-            '<tr><td>Select a <strong>Provisioned-managed</strong> deploy type in the filter bar to view PTU physical availability (Capacity API mock).</td></tr>';
+            '<tr><td>Select a <strong>provisioned throughput</strong> deploy type (Global / Data Zone / Regional provisioned options above) to view PTU physical availability (Capacity API mock).</td></tr>';
           return;
         }
         var rows = ALL_MODELS.filter(function (m) {
@@ -1359,7 +1412,7 @@
         var box = document.getElementById('ptu-bars');
         if (!PTU_DEPLOY_TYPES.has(state.deployType)) {
           box.innerHTML =
-            '<p style="color:var(--text-secondary)">Deployed → Utilized applies to PTU (Provisioned-managed) deploy types only. Select a PTU deploy type in the filter bar.</p>';
+            '<p style="color:var(--text-secondary)">Deployed → Utilized applies to <strong>provisioned throughput</strong> deploy types only. Select Global Provisioned-managed, Data Zone Provisioned-managed, Provisioned-managed, or Provisioned in the filter bar.</p>';
           return;
         }
         var rows = filterUtilRows();
