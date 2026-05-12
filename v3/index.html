@@ -527,6 +527,16 @@
         <div class="section-body">
           <div class="commit-controls">
             <div class="field">
+              <label for="commitment-model">Model</label>
+              <select id="commitment-model" class="filter-select" aria-label="Model">
+                <option value="gpt-4.1-2025-04-14" selected>gpt-4.1-2025-04-14</option>
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="o3">o3</option>
+                <option value="o4-mini">o4-mini</option>
+              </select>
+            </div>
+            <div class="field">
               <label for="req-ptu">Requested PTUs</label>
               <input type="number" id="req-ptu" min="1" step="1" value="50" />
             </div>
@@ -893,45 +903,37 @@
         },
       };
 
-      function aggregateCapacity(region, deployType) {
-        var rows = MOCK_CAPACITY.filter(function (c) {
-          return c.region === region && c.deployType === deployType;
-        });
-        if (!rows.length) return null;
-        var a = 0;
-        var t = 0;
-        rows.forEach(function (r) {
-          a += r.availablePTUs;
-          t += r.totalPTUs;
-        });
-        return { availablePTUs: a, totalPTUs: t, rows: rows };
-      }
-
-      function getAlternativeRegionsDeploy(deployType, minPTUs) {
-        return ALL_REGIONS.map(function (r) {
-          return { r: r, agg: aggregateCapacity(r, deployType) };
+      function getAlternativeRegionsModel(model, deployType, minPTUs) {
+        return MOCK_CAPACITY.filter(function (c) {
+          return c.model === model && c.deployType === deployType && c.availablePTUs >= minPTUs;
         })
-          .filter(function (x) {
-            return x.agg && x.agg.availablePTUs >= minPTUs;
-          })
-          .map(function (x) {
-            return x.r + ' (' + x.agg.availablePTUs + ' PTUs)';
+          .map(function (c) {
+            return c.region + ' (' + c.availablePTUs + ' PTUs)';
           })
           .join(' · ') || 'None currently available';
       }
 
-      function assessCommitmentReadiness(region, deployType, requestedPTUs) {
+      function assessCommitmentReadiness(region, deployType, model, requestedPTUs) {
         var reqPTU = Math.max(0, Math.floor(Number(requestedPTUs)) || 0);
-        var cap = aggregateCapacity(region, deployType);
-        if (!cap) {
+        var row = MOCK_CAPACITY.find(function (c) {
+          return c.region === region && c.deployType === deployType && c.model === model;
+        });
+        if (!row) {
           return {
             status: 'NO-DATA',
             color: '#8a8886',
-            message: 'No mocked capacity rows for ' + region + ' with deploy type "' + deployType + '".',
+            message:
+              'No mocked capacity row for ' +
+              model +
+              ' in ' +
+              region +
+              ' (' +
+              deployType +
+              ').',
           };
         }
-        var avail = cap.availablePTUs;
-        var total = cap.totalPTUs;
+        var avail = row.availablePTUs;
+        var total = row.totalPTUs;
         var signal = getDemandSignal(avail, total);
         var zPct = function (frac) {
           return Math.round(frac * 100);
@@ -944,14 +946,16 @@
             message:
               '❌ NO-GO — insufficient capacity. Only ' +
               avail +
-              ' PTUs available in ' +
+              ' PTUs available for ' +
+              model +
+              ' in ' +
               region +
-              ' for ' +
+              ' / ' +
               deployType +
               ' (' +
               reqPTU +
               ' requested). Alternatives: ' +
-              getAlternativeRegionsDeploy(deployType, reqPTU) +
+              getAlternativeRegionsModel(model, deployType, reqPTU) +
               '.',
           };
         }
@@ -966,7 +970,11 @@
             message:
               '❌ NO-GO — buffer too small, risk of capacity loss. ' +
               avail +
-              ' PTUs available; only ' +
+              ' PTUs available for ' +
+              model +
+              ' in ' +
+              region +
+              '; only ' +
               (avail - reqPTU) +
               ' PTUs (' +
               zb +
@@ -983,7 +991,9 @@
             message:
               '⚠️ CAUTION — high demand, lock capacity now. ' +
               avail +
-              ' PTUs available; buffer after commitment ' +
+              ' PTUs available for ' +
+              model +
+              '; buffer after commitment ' +
               zb +
               '% (demand HIGH: pre-commit pool ' +
               zPct(avail / total) +
@@ -998,7 +1008,9 @@
             message:
               '⚠️ CAUTION — extremely tight, act immediately. ' +
               avail +
-              ' PTUs available; buffer after commitment ' +
+              ' PTUs available for ' +
+              model +
+              '; buffer after commitment ' +
               zb +
               '% (demand CRITICAL: pre-commit pool ' +
               zPct(avail / total) +
@@ -1013,7 +1025,9 @@
             message:
               '⚠️ CAUTION — sufficient but tight. ' +
               avail +
-              ' PTUs available; buffer after commitment ' +
+              ' PTUs available for ' +
+              model +
+              '; buffer after commitment ' +
               zb +
               '% (demand MEDIUM).',
           };
@@ -1028,7 +1042,9 @@
               zb +
               '%). ' +
               avail +
-              ' PTUs available; safe to commit.',
+              ' PTUs available for ' +
+              model +
+              '; safe to commit.',
           };
         }
 
@@ -1043,7 +1059,9 @@
               zb +
               '%). ' +
               avail +
-              ' PTUs available; safe to commit.',
+              ' PTUs available for ' +
+              model +
+              '; safe to commit.',
           };
         }
 
@@ -1056,7 +1074,9 @@
               zb +
               '%. ' +
               avail +
-              ' PTUs available; safe to commit.',
+              ' PTUs available for ' +
+              model +
+              '; safe to commit.',
           };
         }
 
@@ -1069,7 +1089,9 @@
               zb +
               '%). ' +
               avail +
-              ' PTUs available; safe to commit.',
+              ' PTUs available for ' +
+              model +
+              '; safe to commit.',
           };
         }
 
@@ -1077,7 +1099,11 @@
           status: 'CAUTION',
           color: '#ca5010',
           message:
-            '⚠️ CAUTION — review before commit. Demand ' +
+            '⚠️ CAUTION — review before commit. ' +
+            model +
+            ' @ ' +
+            region +
+            ': demand ' +
             signal +
             ', buffer after commitment ' +
             zb +
@@ -1279,7 +1305,7 @@
         else if (status === 'NO-GO') parts.push('Re-scope region or PTU count; engage Capacity Planning if blocked.');
         else parts.push('Adjust filters or deploy type to obtain capacity signal.');
         parts.push('Demand class: ' + signal + '.');
-        parts.push('Headroom: ' + cap.availablePTUs + '/' + cap.totalPTUs + ' PTUs (aggregated mock).');
+        parts.push('Headroom: ' + cap.availablePTUs + '/' + cap.totalPTUs + ' PTUs (selected model row, mock).');
         if (requestedPTUs != null && cap.totalPTUs > 0 && cap.availablePTUs >= requestedPTUs) {
           var rem = cap.availablePTUs - requestedPTUs;
           var remPct = rem / cap.totalPTUs;
@@ -1292,6 +1318,7 @@
         var req = parseInt(document.getElementById('req-ptu').value, 10) || 0;
         var region = state.region;
         var deploy = state.deployType;
+        var model = document.getElementById('commitment-model').value;
         var hero = document.getElementById('commitment-hero');
         var sum = document.getElementById('commitment-summary');
 
@@ -1306,18 +1333,20 @@
           return;
         }
 
-        var res = assessCommitmentReadiness(region, deploy, req);
+        var res = assessCommitmentReadiness(region, deploy, model, req);
         hero.style.background = res.color + '22';
         hero.style.borderColor = res.color;
         hero.style.color = 'var(--text-primary)';
         hero.innerHTML = '<strong>' + res.status + '</strong> — ' + res.message;
 
-        var cap = aggregateCapacity(region, deploy);
+        var cap = MOCK_CAPACITY.find(function (c) {
+          return c.region === region && c.deployType === deploy && c.model === model;
+        });
         if (!cap) {
           sum.innerHTML =
             '<div class="hero-col"><h4>Physical Capacity</h4><p class="hero-stat">—</p></div>' +
             '<div class="hero-col"><h4>Demand Signal</h4><p class="hero-stat">—</p></div>' +
-            '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">No aggregate capacity for this selection.</p></div>';
+            '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">No capacity mock row for this region / model / deploy type.</p></div>';
           return;
         }
         var sig = getDemandSignal(cap.availablePTUs, cap.totalPTUs);
@@ -1330,7 +1359,9 @@
           cap.availablePTUs +
           ' / ' +
           cap.totalPTUs +
-          ' PTUs available (aggregated)</p><div class="fill-bar"><span style="width:' +
+          ' PTUs available (' +
+          model +
+          ')</p><div class="fill-bar"><span style="width:' +
           fillW +
           '%;background:' +
           sigCol +
@@ -1343,7 +1374,7 @@
           sig +
           '</span></p><p style="font-size:12px;color:var(--text-secondary)">' +
           Math.round(pct) +
-          '% of mocked physical pool reported available</p></div>' +
+          '% of model pool reported available (mock)</p></div>' +
           '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">' +
           buildActionParts(res.status, cap, sig, req) +
           '</p></div>';
