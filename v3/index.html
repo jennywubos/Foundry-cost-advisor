@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure AI Foundry — Capacity &amp; Commitment Dashboard (v3)</title>
+  <style>
+    :root {
+      --bg-base: #1a1a2e;
+      --bg-surface: #16213e;
+      --bg-card: #0f3460;
+      --bg-card-hover: #1a4a7a;
+      --azure-blue: #0078d4;
+      --azure-hover: #106ebe;
+      --success: #107c10;
+      --warning: #ca5010;
+      --danger: #a4262c;
+      --critical: #750b1c;
+      --text-primary: #ffffff;
+      --text-secondary: #c8c6c4;
+      --text-dim: #8a8886;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    a { color: var(--azure-blue); }
+    a:hover { text-decoration: underline; }
+    .hidden { display: none !important; }
+
+    @keyframes pulse-critical {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(165, 38, 44, 0.55); border-color: var(--danger); }
+      50% { box-shadow: 0 0 0 6px rgba(165, 38, 44, 0); border-color: #e81123; }
+    }
+
+    #login-view {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 40px 36px 32px;
+    }
+    .login-card .brand { text-align: center; margin-bottom: 28px; }
+    .login-card .brand svg { display: block; margin: 0 auto 12px; }
+    .login-card h1 { font-size: 22px; font-weight: 600; }
+    .login-card .sub { color: var(--text-secondary); font-size: 14px; margin-top: 6px; }
+    .login-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0 22px;
+    }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+    .field input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font: inherit;
+    }
+    .field input:focus { outline: 2px solid var(--azure-blue); outline-offset: 0; }
+    .login-error { color: var(--danger); font-size: 13px; margin: -8px 0 14px; min-height: 20px; }
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: var(--azure-blue);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--azure-hover); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .demo-creds {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .demo-creds h3 { color: var(--text-primary); font-size: 13px; margin-bottom: 10px; font-weight: 600; }
+
+    #auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(26, 26, 46, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s;
+    }
+    #auth-overlay.visible { opacity: 1; pointer-events: auto; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #auth-overlay p { margin-top: 16px; color: var(--text-secondary); font-size: 14px; }
+
+    #app-view { min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar {
+      background: var(--azure-blue);
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 20px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+    .topbar-meta { font-size: 12px; opacity: 0.95; max-width: 520px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 6px 12px;
+      border-radius: 4px;
+    }
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); }
+
+    .main { padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%; flex: 1; }
+
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding: 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .filter-group { flex: 1; min-width: 200px; }
+    .filter-group > button.filter-toggle {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font: inherit;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .filter-group > button.filter-toggle:hover { background: var(--bg-card-hover); }
+    .filter-panel {
+      margin-top: 8px;
+      padding: 10px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .filter-panel label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 4px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .filter-panel label:hover { background: rgba(255, 255, 255, 0.04); }
+    .filter-panel label.disabled { opacity: 0.35; pointer-events: none; }
+
+    .estimate-note {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: rgba(0, 120, 212, 0.12);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .section {
+      margin-bottom: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .section > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 16px;
+      background: var(--bg-card);
+    }
+    .section > summary::-webkit-details-marker { display: none; }
+    .section > summary::after {
+      content: '▾';
+      margin-left: auto;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .section[open] > summary::after { transform: rotate(180deg); }
+    .section-body { padding: 18px; border-top: 1px solid var(--border); }
+
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(0, 120, 212, 0.25);
+      color: var(--text-primary);
+    }
+    .badge.demo {
+      background: rgba(164, 38, 44, 0.35);
+      cursor: help;
+    }
+    .badge.time { background: rgba(255, 255, 255, 0.08); font-weight: 500; color: var(--text-secondary); }
+
+    .commit-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+      margin-bottom: 16px;
+    }
+    .commit-controls .field { margin-bottom: 0; min-width: 140px; }
+    .commit-controls input[type="number"] { width: 120px; }
+
+    .hero-banner {
+      padding: 16px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      font-size: 15px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; }
+    }
+    .hero-col {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .hero-col h4 { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+    .hero-stat { font-size: 20px; font-weight: 700; }
+    .fill-bar {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .fill-bar > span { display: block; height: 100%; border-radius: 4px; transition: width 0.25s; }
+    .pulse-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    .heatmap-wrap { overflow-x: auto; margin-bottom: 16px; }
+    .heatmap {
+      border-collapse: collapse;
+      min-width: 640px;
+      width: 100%;
+      font-size: 13px;
+    }
+    .heatmap th, .heatmap td {
+      border: 1px solid var(--border);
+      padding: 10px 8px;
+      text-align: center;
+    }
+    .heatmap th { background: var(--bg-card); color: var(--text-secondary); font-weight: 600; }
+    .heatmap td.na { color: var(--text-dim); }
+    .heatmap .cell-critical {
+      animation: pulse-critical 1.5s ease-in-out infinite;
+      border-width: 2px;
+      border-style: solid;
+    }
+
+    .flags { margin-top: 12px; }
+    .flags li { margin-bottom: 8px; color: var(--text-secondary); font-size: 13px; }
+    .flags-note { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+
+    .ptu-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .ptu-card h4 { margin-bottom: 10px; font-size: 14px; }
+    .bar-row { margin-bottom: 8px; }
+    .bar-row .lbl { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .bar-track {
+      height: 22px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-track > div { height: 100%; border-radius: 4px; transition: width 0.25s; }
+    .cache-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--warning);
+      padding: 8px;
+      background: rgba(202, 80, 16, 0.12);
+      border-radius: 4px;
+    }
+
+    .info-banner {
+      font-size: 13px;
+      color: var(--text-secondary);
+      padding: 12px;
+      background: rgba(0, 120, 212, 0.1);
+      border-radius: 6px;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+    }
+
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    table.data th, table.data td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+    }
+    table.data th { background: var(--bg-card); color: var(--text-secondary); font-weight: 600; }
+    table.data tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+
+    .spark-wrap { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; }
+    .spark-card {
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .spark-card h5 { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+    .spark-card svg { width: 100%; height: 72px; display: block; }
+
+    footer {
+      padding: 20px;
+      font-size: 12px;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    footer p { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="login-view">
+    <div class="login-card">
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 21 21" aria-hidden="true">
+          <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+          <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+          <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+          <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+        </svg>
+        <div>Microsoft</div>
+        <div class="login-divider"></div>
+        <h1>Sign in to Azure AI Foundry</h1>
+        <p class="sub">Internal Tools</p>
+      </div>
+      <form id="login-form" autocomplete="off">
+        <div class="field">
+          <label for="email">Email: work account</label>
+          <input id="email" name="email" type="email" placeholder="name@microsoft.com" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" placeholder="Password" required />
+        </div>
+        <p class="login-error" id="login-error" aria-live="polite"></p>
+        <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
+      </form>
+      <div class="demo-creds">
+        <h3>Demo accounts (Microsoft internal):</h3>
+        <p>👤 <strong>capacity.pm@microsoft.com</strong> / Demo2024!<br /><span>Azure AI Foundry PM — Capacity Planning view</span></p>
+        <p>👤 <strong>sales.ae@microsoft.com</strong> / Demo2024!<br /><span>Account Executive — Commitment Readiness view</span></p>
+        <p>👤 <strong>ops.admin@microsoft.com</strong> / Demo2024!<br /><span>Azure Operations Manager — Utilization view</span></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="auth-overlay" aria-hidden="true">
+    <div class="spinner"></div>
+    <p>Signing in…</p>
+  </div>
+
+  <div id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="topbar-left">
+        <svg width="20" height="20" viewBox="0 0 21 21" aria-hidden="true">
+          <rect x="1" y="1" width="9" height="9" fill="#fff"/>
+          <rect x="11" y="1" width="9" height="9" fill="#fff"/>
+          <rect x="1" y="11" width="9" height="9" fill="#fff"/>
+          <rect x="11" y="11" width="9" height="9" fill="#fff"/>
+        </svg>
+        <span>Azure AI Foundry</span>
+      </div>
+      <div class="topbar-meta" id="user-title"></div>
+      <div class="topbar-right">
+        <span class="user-pill"><span class="avatar" id="user-initials"></span><span id="user-name"></span></span>
+        <button type="button" class="btn-ghost" id="signout-btn">Sign out</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <p class="estimate-note" role="note">
+        <strong>PTU ↔ TPM (GPT-4.1):</strong> Microsoft does not publish a single fixed PTU/TPM ratio for GPT-4.1. Order-of-magnitude estimate ~3,500–4,000 input TPM per PTU (rough adjustment from GPT-4o-class baselines) — <strong>LOW confidence</strong>. Authoritative sizing: Foundry PTU Calculator at <a href="https://ai.azure.com" target="_blank" rel="noopener noreferrer">ai.azure.com</a>. Product gap: a PTU Calculator API would enable automated sizing end-to-end.
+      </p>
+
+      <div class="filter-bar" id="filter-bar">
+        <div class="filter-group" data-key="region">
+          <button type="button" class="filter-toggle" aria-expanded="false"><span>Region</span><span>▾</span></button>
+          <div class="filter-panel hidden" id="panel-region"></div>
+        </div>
+        <div class="filter-group" data-key="model">
+          <button type="button" class="filter-toggle" aria-expanded="false"><span>Model</span><span>▾</span></button>
+          <div class="filter-panel hidden" id="panel-model"></div>
+        </div>
+        <div class="filter-group" data-key="deployType">
+          <button type="button" class="filter-toggle" aria-expanded="false"><span>Deploy Type</span><span>▾</span></button>
+          <div class="filter-panel hidden" id="panel-deployType"></div>
+        </div>
+      </div>
+
+      <details class="section" id="sec-commitment">
+        <summary>
+          <span>Commitment Readiness</span>
+          <span class="badges" style="margin-left:8px;">
+            <span class="badge">Capacity API</span>
+            <span class="badge demo" title="Real data via API — see commented code in source">🔴 Demo Mode</span>
+            <span class="badge time section-refresh" data-sec="commitment"></span>
+          </span>
+        </summary>
+        <div class="section-body">
+          <div class="commit-controls">
+            <div class="field">
+              <label for="req-ptu">Requested PTUs</label>
+              <input type="number" id="req-ptu" min="1" step="1" value="50" />
+            </div>
+          </div>
+          <div class="hero-banner" id="commitment-hero"></div>
+          <div class="hero-grid" id="commitment-summary"></div>
+        </div>
+      </details>
+
+      <details class="section" id="sec-heatmap">
+        <summary>
+          <span>Capacity Heatmap</span>
+          <span class="badges" style="margin-left:8px;">
+            <span class="badge">Capacity API</span>
+            <span class="badge demo" title="Real data via API — see commented code in source">🔴 Demo Mode</span>
+            <span class="badge time section-refresh" data-sec="heatmap"></span>
+          </span>
+        </summary>
+        <div class="section-body">
+          <div class="heatmap-wrap"><table class="heatmap" id="heatmap-table"></table></div>
+          <ul class="flags" id="capacity-flags"></ul>
+          <p class="flags-note">These signals feed Azure Capacity Planning prioritization for GPU datacenter expansion. CRITICAL = immediate action needed | HIGH = plan within 60 days</p>
+        </div>
+      </details>
+
+      <details class="section" id="sec-deployed">
+        <summary>
+          <span>Deployed → Utilized</span>
+          <span class="badges" style="margin-left:8px;">
+            <span class="badge">Azure Monitor API</span>
+            <span class="badge demo" title="Real data via API — see commented code in source">🔴 Demo Mode</span>
+            <span class="badge time section-refresh" data-sec="deployed"></span>
+          </span>
+        </summary>
+        <div class="section-body">
+          <h3 style="margin-bottom:12px;font-size:15px;">PTU deployments</h3>
+          <div id="ptu-bars"></div>
+          <h3 style="margin:20px 0 12px;font-size:15px;">Standard actual usage</h3>
+          <div class="info-banner">
+            ℹ️ Standard usage shown as actual consumption (Azure Monitor), not quota allocation.<br />
+            Global Standard: global aggregate only — dynamic routing prevents per-region breakdown.<br />
+            Source: <a href="https://learn.microsoft.com/en-us/azure/foundry/foundry-models/quotas-limits" target="_blank" rel="noopener noreferrer">Foundry quotas and limits</a>
+          </div>
+          <table class="data" id="standard-table">
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Type</th>
+                <th>Model</th>
+                <th>Actual Input TPM</th>
+                <th>Actual Output TPM</th>
+                <th>Throttle %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="section" id="sec-demand">
+        <summary>
+          <span>Demand Signal</span>
+          <span class="badges" style="margin-left:8px;">
+            <span class="badge">Azure Monitor API</span>
+            <span class="badge demo" title="Real data via API — see commented code in source">🔴 Demo Mode</span>
+            <span class="badge time section-refresh" data-sec="demand"></span>
+          </span>
+        </summary>
+        <div class="section-body">
+          <table class="data" id="demand-table">
+            <thead>
+              <tr>
+                <th>Region</th>
+                <th>Model</th>
+                <th>Deploy Type</th>
+                <th>Available %</th>
+                <th>Util %</th>
+                <th>Throttle %</th>
+                <th>Demand</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="spark-wrap" id="sparklines"></div>
+          <p class="flags-note" style="margin-top:14px;">
+            Demand signal legend:<br />
+            CRITICAL = immediate GPU expansion needed · HIGH = plan expansion within 60 days · MEDIUM = monitor, plan next quarter · LOW = healthy headroom
+          </p>
+        </div>
+      </details>
+    </div>
+
+    <footer>
+      <p>Data sources: Azure AI Capacity API · Azure Monitor Metrics API</p>
+      <p>I'm intentionally keeping data mocked — the goal is to validate the workflow, not the backend.</p>
+      <p>Azure AI Foundry v3 — Internal Tool | Builder: Jenny Wu | <a href="mailto:JennyWuBos@gmail.com">JennyWuBos@gmail.com</a></p>
+      <p><a href="https://github.com/jennywubos/Foundry-cost-advisor" target="_blank" rel="noopener noreferrer">github.com/jennywubos/Foundry-cost-advisor</a> | <a href="../v2/">← v2</a> | <a href="../v1/">← v1</a></p>
+      <p>Product gap: Foundry PTU Calculator API needed for automated PTU sizing end-to-end</p>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      /* === REAL API: Azure AI Capacity API ===
+       * Endpoint: GET https://management.azure.com/subscriptions/{subscriptionId}
+       *   /providers/Microsoft.CognitiveServices/locations/{location}
+       *   /models?api-version=2024-10-01
+       *
+       * Auth: Microsoft Entra ID Bearer token
+       *   scope: "https://management.azure.com/.default"
+       *   In production: MSAL.js PublicClientApplication.loginPopup()
+       *   Role required: Azure AI User or Reader on subscription
+       *   Source: https://learn.microsoft.com/en-us/azure/foundry/concepts/authentication-authorization-foundry
+       *
+       * Returns: available PTU capacity per model/region/deployType
+       * Key fields: model.name, model.skuName, model.availableCapacity, location
+       *
+       * KNOWN LIMITATION: Available capacity ≠ guaranteed obtainability.
+       * Quota already allocated to other subscriptions (not yet deployed) reduces
+       * physical capacity available to new customers — but this is not visible
+       * in the Capacity API response.
+       * Source: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/provisioned-throughput-onboarding
+       * "Quota doesn't guarantee capacity. Deploy your model in Foundry before
+       *  purchasing a matching reservation."
+       *
+       * async function fetchCapacity(token, subscriptionId, location) {
+       *   const res = await fetch(
+       *     `https://management.azure.com/subscriptions/${subscriptionId}`
+       *     + `/providers/Microsoft.CognitiveServices/locations/${location}`
+       *     + `/models?api-version=2024-10-01`,
+       *     { headers: { Authorization: `Bearer ${token}` } }
+       *   );
+       *   return (await res.json()).value;
+       * }
+       * === END REAL API === */
+
+      /* === REAL API: Azure Monitor Metrics API ===
+       * Endpoint: GET https://management.azure.com/subscriptions/{subscriptionId}
+       *   /resourceGroups/{resourceGroup}
+       *   /providers/Microsoft.CognitiveServices/accounts/{accountName}
+       *   /providers/microsoft.insights/metrics
+       *   ?api-version=2023-10-01
+       *   &metricnames=ProvisionedManagedUtilizationV2,ProcessedPromptTokens,
+       *                GeneratedCompletionTokens,CacheMatchRate,BlockedCalls
+       *   &timespan=PT1H&interval=PT1M&aggregation=Average,Total
+       *
+       * IMPORTANT: Requires subscriptionId + resourceGroup + accountName.
+       *   subscriptionId alone is NOT sufficient.
+       *
+       * For v3 (internal Microsoft view), this API would be called across
+       * ALL customer resources in all subscriptions to aggregate usage per region.
+       * This requires elevated Microsoft-internal service principal permissions.
+       *
+       * Key metrics for PTU deployments:
+       *   ProvisionedManagedUtilizationV2 → PTU utilization % (0–100+)
+       *     Source: https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/provisioned-throughput
+       *     "Measured on 1-minute increments. Values >100% indicate overflow to standard."
+       *
+       * Key metrics for Standard deployments (actual usage, not quota):
+       *   ProcessedPromptTokens      → actual input tokens consumed
+       *   GeneratedCompletionTokens  → actual output tokens consumed
+       *   BlockedCalls               → 429 throttled requests (demand pressure signal)
+       *   CacheMatchRate             → prompt cache hit rate (0.0–1.0)
+       *
+       * For Standard, usage is measured per deployment resource (per region for
+       * Regional Standard; aggregated globally for Global Standard).
+       *
+       * async function fetchMonitor(token, subscriptionId, rg, account, timespan='PT1H') {
+       *   const base = `https://management.azure.com/subscriptions/${subscriptionId}`
+       *     + `/resourceGroups/${rg}`
+       *     + `/providers/Microsoft.CognitiveServices/accounts/${account}`;
+       *   const res = await fetch(
+       *     base + `/providers/microsoft.insights/metrics`
+       *       + `?api-version=2023-10-01`
+       *       + `&metricnames=ProvisionedManagedUtilizationV2,ProcessedPromptTokens,`
+       *       + `GeneratedCompletionTokens,CacheMatchRate,BlockedCalls`
+       *       + `&timespan=${timespan}&interval=PT1M&aggregation=Average,Total`,
+       *     { headers: { Authorization: `Bearer ${token}` } }
+       *   );
+       *   return await res.json();
+       * }
+       * === END REAL API === */
+
+      // ─────────────────────────────────────────────────────────────────────
+      // MOCK DATA — intentionally mocked to validate workflow, not backend
+      // All numbers sourced from official Microsoft documentation
+      // ─────────────────────────────────────────────────────────────────────
+
+      // PTU CAPACITY per region/model/deployType
+      // Source: Capacity API structure from
+      //   https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/provisioned-throughput
+      // Numbers: representative mock showing realistic regional demand variation
+      // PTU capacity is per model (physical GPU allocation differs per model)
+      // PTU quota is model-independent (per region + per deploy type)
+      // Source: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/provisioned-throughput-onboarding
+      //   "Unlike TPM quota, PTUs are model-independent."
+
+      const MOCK_CAPACITY = [
+        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', availablePTUs: 60, totalPTUs: 500 },
+        { region: 'East US', model: 'gpt-4o', deployType: 'Global Provisioned-Managed', availablePTUs: 0, totalPTUs: 300 },
+        { region: 'East US', model: 'gpt-4o-mini', deployType: 'Global Provisioned-Managed', availablePTUs: 340, totalPTUs: 500 },
+        { region: 'East US', model: 'o3', deployType: 'Global Provisioned-Managed', availablePTUs: 25, totalPTUs: 200 },
+        { region: 'West Europe', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', availablePTUs: 180, totalPTUs: 400 },
+        { region: 'West Europe', model: 'gpt-4o', deployType: 'Global Provisioned-Managed', availablePTUs: 90, totalPTUs: 300 },
+        { region: 'Sweden Central', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', availablePTUs: 290, totalPTUs: 400 },
+        { region: 'Sweden Central', model: 'gpt-4o', deployType: 'Global Provisioned-Managed', availablePTUs: 150, totalPTUs: 300 },
+        { region: 'Japan East', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', availablePTUs: 310, totalPTUs: 400 },
+        { region: 'Japan East', model: 'gpt-4o-mini', deployType: 'Global Provisioned-Managed', availablePTUs: 280, totalPTUs: 400 },
+        { region: 'Australia East', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', availablePTUs: 200, totalPTUs: 300 },
+        // Representative mock only — enables heatmap/filter graph for models listed in UI spec
+        { region: 'West Europe', model: 'o3', deployType: 'Global Provisioned-Managed', availablePTUs: 40, totalPTUs: 180 },
+        { region: 'Sweden Central', model: 'o4-mini', deployType: 'Global Provisioned-Managed', availablePTUs: 100, totalPTUs: 250 },
+        { region: 'Australia East', model: 'o4-mini', deployType: 'Global Provisioned-Managed', availablePTUs: 95, totalPTUs: 220 },
+      ];
+
+      function getDemandSignal(availablePTUs, totalPTUs) {
+        const pct = availablePTUs / totalPTUs;
+        if (pct <= 0.05) return 'CRITICAL';
+        if (pct <= 0.2) return 'HIGH';
+        if (pct <= 0.5) return 'MEDIUM';
+        return 'LOW';
+      }
+
+      function signalColor(signal) {
+        if (signal === 'CRITICAL') return '#750b1c';
+        if (signal === 'HIGH') return '#a4262c';
+        if (signal === 'MEDIUM') return '#ca5010';
+        return '#107c10';
+      }
+
+      const MOCK_PTU_UTILIZATION = [
+        { region: 'East US', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 440, avgUtilizationPct: 112, peakRPM: 220, throttledCallsPct: 0.021, cacheMatchRate: 0.0 },
+        { region: 'East US', model: 'gpt-4o', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 300, avgUtilizationPct: 100, peakRPM: 185, throttledCallsPct: 0.035, cacheMatchRate: 0.12 },
+        { region: 'East US', model: 'gpt-4o-mini', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 160, avgUtilizationPct: 68, peakRPM: 320, throttledCallsPct: 0.004, cacheMatchRate: 0.03 },
+        { region: 'West Europe', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 220, avgUtilizationPct: 45, peakRPM: 90, throttledCallsPct: 0.003, cacheMatchRate: 0.38 },
+        { region: 'West Europe', model: 'gpt-4o', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 210, avgUtilizationPct: 62, peakRPM: 140, throttledCallsPct: 0.008, cacheMatchRate: 0.15 },
+        { region: 'Sweden Central', model: 'gpt-4.1-2025-04-14', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 110, avgUtilizationPct: 22, peakRPM: 45, throttledCallsPct: 0.001, cacheMatchRate: 0.45 },
+        { region: 'Sweden Central', model: 'o4-mini', deployType: 'Global Provisioned-Managed', totalDeployedPTUs: 55, avgUtilizationPct: 41, peakRPM: 200, throttledCallsPct: 0.006, cacheMatchRate: 0.08 },
+      ];
+
+      const MOCK_STANDARD_USAGE = [
+        { scope: 'Global', scopeType: 'GlobalStandard', model: 'gpt-4.1-2025-04-14', actualTPM_input: 3340000, actualTPM_output: 22000, throttledCallsPct: 0.142, note: 'Global Standard usage cannot be split per region — dynamic routing' },
+        { scope: 'Global', scopeType: 'GlobalStandard', model: 'gpt-4o-mini', actualTPM_input: 18500000, actualTPM_output: 185000, throttledCallsPct: 0.031, note: 'Global Standard usage cannot be split per region — dynamic routing' },
+        { scope: 'US Zone', scopeType: 'DataZoneStandard', model: 'gpt-4.1-2025-04-14', actualTPM_input: 1200000, actualTPM_output: 12000, throttledCallsPct: 0.018 },
+        { scope: 'EU Zone', scopeType: 'DataZoneStandard', model: 'gpt-4.1-2025-04-14', actualTPM_input: 800000, actualTPM_output: 8000, throttledCallsPct: 0.009 },
+        { scope: 'East US', scopeType: 'RegionalStandard', model: 'gpt-4.1-2025-04-14', actualTPM_input: 600000, actualTPM_output: 6000, throttledCallsPct: 0.055 },
+        { scope: 'West Europe', scopeType: 'RegionalStandard', model: 'gpt-4.1-2025-04-14', actualTPM_input: 250000, actualTPM_output: 2500, throttledCallsPct: 0.012 },
+      ];
+
+      function generatePTUHistory(baseUtil) {
+        return Array.from({ length: 60 }, function (_, i) {
+          return {
+            min: i,
+            util: Math.max(0, baseUtil + (Math.random() - 0.5) * 15),
+            throttle: baseUtil > 90 ? Math.random() * 5 : Math.random() * 1.5,
+          };
+        });
+      }
+
+      function generateStandardHistory(baseTPM) {
+        return Array.from({ length: 60 }, function (_, i) {
+          return {
+            min: i,
+            tpm: baseTPM * (0.85 + Math.random() * 0.3),
+            throttle: Math.random() * 8,
+          };
+        });
+      }
+
+      const ALL_REGIONS = ['East US', 'West Europe', 'Sweden Central', 'Japan East', 'Australia East'];
+      const ALL_MODELS = ['gpt-4.1-2025-04-14', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'];
+      const ALL_DEPLOY_TYPES = [
+        'Global Provisioned-Managed',
+        'Data Zone Provisioned',
+        'Regional Provisioned',
+        'Global Standard',
+        'Data Zone Standard',
+        'Regional Standard',
+      ];
+
+      const PTU_DEPLOY_TYPES = new Set([
+        'Global Provisioned-Managed',
+        'Data Zone Provisioned',
+        'Regional Provisioned',
+      ]);
+
+      const DEMO_USERS = {
+        'capacity.pm@microsoft.com': {
+          password: 'Demo2024!',
+          name: 'Taylor Chen',
+          initials: 'TC',
+          title: 'Principal PM — Azure AI Foundry Capacity',
+          defaultView: 'capacity',
+        },
+        'sales.ae@microsoft.com': {
+          password: 'Demo2024!',
+          name: 'Alex Rivera',
+          initials: 'AR',
+          title: 'Account Executive — Enterprise AI',
+          defaultView: 'commitment',
+        },
+        'ops.admin@microsoft.com': {
+          password: 'Demo2024!',
+          name: 'Sam Okonkwo',
+          initials: 'SO',
+          title: 'Azure Operations Manager',
+          defaultView: 'utilization',
+        },
+      };
+
+      function getAlternativeRegions(model, deployType, minPTUs) {
+        return MOCK_CAPACITY.filter(function (c) {
+          return c.model === model && c.deployType === deployType && c.availablePTUs >= minPTUs;
+        })
+          .map(function (c) {
+            return c.region + ' (' + c.availablePTUs + ' PTUs)';
+          })
+          .join(' · ') || 'None currently available';
+      }
+
+      function assessCommitmentReadiness(region, model, deployType, requestedPTUs) {
+        const cap = MOCK_CAPACITY.find(function (c) {
+          return c.region === region && c.model === model && c.deployType === deployType;
+        });
+        if (!cap) {
+          return {
+            status: 'NO-DATA',
+            color: '#8a8886',
+            message: 'No capacity data for ' + model + ' in ' + region + ' (' + deployType + ').',
+          };
+        }
+        const signal = getDemandSignal(cap.availablePTUs, cap.totalPTUs);
+        const canDeploy = cap.availablePTUs >= requestedPTUs;
+        const pctFree = Math.round((cap.availablePTUs / cap.totalPTUs) * 100);
+
+        if (canDeploy && signal === 'LOW') {
+          return {
+            status: 'GO',
+            color: '#107c10',
+            message:
+              '✅ ' +
+              cap.availablePTUs +
+              ' PTUs available in ' +
+              region +
+              ' (' +
+              pctFree +
+              '% free). Demand signal: LOW. Safe to commit. Recommended: Deploy hourly first to lock capacity → then purchase Annual Reservation.',
+          };
+        }
+        if (canDeploy && signal === 'MEDIUM') {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ ' +
+              cap.availablePTUs +
+              ' PTUs available but ' +
+              region +
+              ' demand is MEDIUM (' +
+              pctFree +
+              '% remaining). Capacity may tighten. Recommended: Deploy immediately to lock capacity before signing.',
+          };
+        }
+        if (canDeploy && signal === 'HIGH') {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ ' +
+              cap.availablePTUs +
+              ' PTUs technically available but demand is HIGH. Risk of capacity loss before contract start. Deploy TODAY to lock capacity.',
+          };
+        }
+        if (canDeploy && signal === 'CRITICAL') {
+          return {
+            status: 'CAUTION',
+            color: '#ca5010',
+            message:
+              '⚠️ ' +
+              cap.availablePTUs +
+              ' PTUs can cover the request but supply is CRITICAL (' +
+              pctFree +
+              '% headroom). Deploy immediately to lock capacity; escalation advised.',
+          };
+        }
+        if (!canDeploy && signal === 'CRITICAL') {
+          return {
+            status: 'NO-GO',
+            color: '#a4262c',
+            message:
+              '❌ ' +
+              region +
+              ' / ' +
+              model +
+              ' is at capacity (' +
+              cap.availablePTUs +
+              ' PTUs remaining, need ' +
+              requestedPTUs +
+              '). Alternatives: ' +
+              getAlternativeRegions(model, deployType, requestedPTUs) +
+              '. Escalate to Azure Capacity Planning for ' +
+              region +
+              ' GPU expansion.',
+          };
+        }
+        return {
+          status: 'INSUFFICIENT',
+          color: '#a4262c',
+          message:
+            '❌ Only ' +
+            cap.availablePTUs +
+            ' PTUs available in ' +
+            region +
+            ', but ' +
+            requestedPTUs +
+            ' requested. Consider splitting across regions or reducing commitment size.',
+        };
+      }
+
+      function generateCapacityFlags(rows) {
+        var src = rows && rows.length ? rows : MOCK_CAPACITY;
+        return src
+          .map(function (c) {
+            return Object.assign({}, c, { signal: getDemandSignal(c.availablePTUs, c.totalPTUs) });
+          })
+          .filter(function (c) {
+            return c.signal === 'CRITICAL' || c.signal === 'HIGH';
+          })
+          .sort(function (a, b) {
+            return a.availablePTUs / a.totalPTUs - b.availablePTUs / b.totalPTUs;
+          })
+          .map(function (c) {
+            if (c.signal === 'CRITICAL') {
+              return (
+                '🚨 ' +
+                c.region +
+                ' / ' +
+                c.model +
+                ': SOLD OUT (' +
+                c.deployType +
+                '). Escalate to Azure Capacity Planning for GPU expansion.'
+              );
+            }
+            return (
+              '⚠️ ' +
+              c.region +
+              ' / ' +
+              c.model +
+              ': ' +
+              c.availablePTUs +
+              '/' +
+              c.totalPTUs +
+              ' PTUs remaining (' +
+              Math.round((c.availablePTUs / c.totalPTUs) * 100) +
+              '%). Monitor — approaching limit.'
+            );
+          });
+      }
+
+      function generateDemandRanking(filteredCapacity) {
+        const source = filteredCapacity && filteredCapacity.length ? filteredCapacity : MOCK_CAPACITY;
+        return source
+          .map(function (c) {
+            const util = MOCK_PTU_UTILIZATION.find(function (u) {
+              return u.region === c.region && u.model === c.model && u.deployType === c.deployType;
+            });
+            const availPct = Math.round((c.availablePTUs / c.totalPTUs) * 100);
+            const ratio = c.availablePTUs / c.totalPTUs;
+            let action =
+              c.availablePTUs === 0
+                ? '🚨 Escalate now'
+                : ratio < 0.2
+                  ? '⚠️ Plan expansion'
+                  : '✅ Healthy';
+            return {
+              region: c.region,
+              model: c.model,
+              deployType: c.deployType,
+              availablePct: availPct,
+              utilPct: util != null ? util.avgUtilizationPct : null,
+              throttlePct: util != null ? util.throttledCallsPct : null,
+              signal: getDemandSignal(c.availablePTUs, c.totalPTUs),
+              action: action,
+            };
+          })
+          .sort(function (a, b) {
+            return a.availablePct - b.availablePct;
+          });
+      }
+
+      function utilizationBarColor(pct) {
+        if (pct > 100) return '#a4262c';
+        if (pct >= 80) return '#ca5010';
+        if (pct >= 50) return '#0078d4';
+        return '#107c10';
+      }
+
+      function throttleColor(pct) {
+        if (pct < 0.02) return '#107c10';
+        if (pct <= 0.1) return '#ca5010';
+        return '#a4262c';
+      }
+
+      function buildTuples() {
+        const set = {};
+        function add(r, m, d) {
+          set[r + '\0' + m + '\0' + d] = { region: r, model: m, deployType: d };
+        }
+        MOCK_CAPACITY.forEach(function (x) {
+          add(x.region, x.model, x.deployType);
+        });
+        MOCK_PTU_UTILIZATION.forEach(function (x) {
+          add(x.region, x.model, x.deployType);
+        });
+        MOCK_STANDARD_USAGE.forEach(function (x) {
+          var dt =
+            x.scopeType === 'GlobalStandard'
+              ? 'Global Standard'
+              : x.scopeType === 'DataZoneStandard'
+                ? 'Data Zone Standard'
+                : 'Regional Standard';
+          var r = x.scope;
+          add(r, x.model, dt);
+        });
+        return Object.keys(set).map(function (k) {
+          return set[k];
+        });
+      }
+
+      const DATA_TUPLES = buildTuples();
+
+      function tupleMatchesFilters(t, selR, selM, selD) {
+        return selR.has(t.region) && selM.has(t.model) && selD.has(t.deployType);
+      }
+
+      function computeEnabledOptions(selR, selM, selD) {
+        const enabledR = new Set();
+        const enabledM = new Set();
+        const enabledD = new Set();
+        DATA_TUPLES.forEach(function (t) {
+          if (selM.has(t.model) && selD.has(t.deployType)) enabledR.add(t.region);
+          if (selR.has(t.region) && selD.has(t.deployType)) enabledM.add(t.model);
+          if (selR.has(t.region) && selM.has(t.model)) enabledD.add(t.deployType);
+        });
+        return { enabledR: enabledR, enabledM: enabledM, enabledD: enabledD };
+      }
+
+      var state = {
+        regions: new Set(ALL_REGIONS),
+        models: new Set(ALL_MODELS),
+        deployTypes: new Set([
+          'Global Provisioned-Managed',
+          'Data Zone Provisioned',
+          'Regional Provisioned',
+        ]),
+      };
+
+      function firstSorted(set, order) {
+        for (var i = 0; i < order.length; i++) {
+          if (set.has(order[i])) return order[i];
+        }
+        return null;
+      }
+
+      function filterCapacityRows() {
+        return MOCK_CAPACITY.filter(function (c) {
+          return state.regions.has(c.region) && state.models.has(c.model) && state.deployTypes.has(c.deployType);
+        });
+      }
+
+      function filterUtilRows() {
+        return MOCK_PTU_UTILIZATION.filter(function (u) {
+          return state.regions.has(u.region) && state.models.has(u.model) && state.deployTypes.has(u.deployType);
+        });
+      }
+
+      function filterStandardRows() {
+        return MOCK_STANDARD_USAGE.filter(function (s) {
+          if (!state.models.has(s.model)) return false;
+          var dt =
+            s.scopeType === 'GlobalStandard'
+              ? 'Global Standard'
+              : s.scopeType === 'DataZoneStandard'
+                ? 'Data Zone Standard'
+                : 'Regional Standard';
+          if (!state.deployTypes.has(dt)) return false;
+          if (s.scopeType === 'RegionalStandard') return state.regions.has(s.scope);
+          if (s.scopeType === 'DataZoneStandard') return true;
+          return true;
+        });
+      }
+
+      function renderFilters() {
+        var selR = state.regions;
+        var selM = state.models;
+        var selD = state.deployTypes;
+        var en = computeEnabledOptions(selR, selM, selD);
+
+        function paint(key, all, enabled, selected) {
+          var panel = document.getElementById('panel-' + key);
+          panel.innerHTML = '';
+          all.forEach(function (item) {
+            var id = 'f-' + key + '-' + item.replace(/[^a-z0-9]+/gi, '-');
+            var lab = document.createElement('label');
+            if (!enabled.has(item)) lab.className = 'disabled';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = id;
+            cb.checked = selected.has(item);
+            cb.dataset.value = item;
+            cb.dataset.group = key;
+            if (!enabled.has(item)) cb.disabled = true;
+            lab.appendChild(cb);
+            lab.appendChild(document.createTextNode(item));
+            panel.appendChild(lab);
+          });
+        }
+
+        paint('region', ALL_REGIONS, en.enabledR, selR);
+        paint('model', ALL_MODELS, en.enabledM, selM);
+        paint('deployType', ALL_DEPLOY_TYPES, en.enabledD, selD);
+      }
+
+      function pruneInvalidSelections() {
+        var en = computeEnabledOptions(state.regions, state.models, state.deployTypes);
+        var nr = new Set();
+        state.regions.forEach(function (r) {
+          if (en.enabledR.has(r)) nr.add(r);
+        });
+        if (nr.size === 0) {
+          en.enabledR.forEach(function (r) {
+            nr.add(r);
+          });
+        }
+        if (nr.size === 0) {
+          ALL_REGIONS.forEach(function (r) {
+            nr.add(r);
+          });
+        }
+        state.regions = nr;
+
+        var nm = new Set();
+        state.models.forEach(function (m) {
+          if (en.enabledM.has(m)) nm.add(m);
+        });
+        if (nm.size === 0) {
+          en.enabledM.forEach(function (m) {
+            nm.add(m);
+          });
+        }
+        if (nm.size === 0) {
+          ALL_MODELS.forEach(function (m) {
+            nm.add(m);
+          });
+        }
+        state.models = nm;
+
+        var nd = new Set();
+        state.deployTypes.forEach(function (d) {
+          if (en.enabledD.has(d)) nd.add(d);
+        });
+        if (nd.size === 0) {
+          en.enabledD.forEach(function (d) {
+            nd.add(d);
+          });
+        }
+        if (nd.size === 0) {
+          ['Global Provisioned-Managed', 'Data Zone Provisioned', 'Regional Provisioned'].forEach(function (d) {
+            nd.add(d);
+          });
+        }
+        state.deployTypes = nd;
+      }
+
+      function attachFilterListeners() {
+        document.getElementById('filter-bar').onclick = function (e) {
+          var btn = e.target.closest('.filter-toggle');
+          if (btn) {
+            var panel = btn.parentNode.querySelector('.filter-panel');
+            panel.classList.toggle('hidden');
+            btn.setAttribute('aria-expanded', (!panel.classList.contains('hidden')).toString());
+          }
+        };
+
+        document.getElementById('filter-bar').onchange = function (e) {
+          var t = e.target;
+          if (t.type !== 'checkbox' || !t.dataset.group) return;
+          var g = t.dataset.group;
+          var v = t.dataset.value;
+          var set =
+            g === 'region' ? state.regions : g === 'model' ? state.models : state.deployTypes;
+          if (t.checked) set.add(v);
+          else set.delete(v);
+          pruneInvalidSelections();
+          renderFilters();
+          refreshDashboard();
+        };
+      }
+
+      function formatTime(d) {
+        return d.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+
+      var lastRefresh = new Date();
+
+      function tickRefreshLabels() {
+        lastRefresh = new Date();
+        document.querySelectorAll('.section-refresh').forEach(function (el) {
+          el.textContent = 'Last refreshed: ' + formatTime(lastRefresh);
+        });
+      }
+
+      function buildActionParts(status, cap, signal) {
+        var parts = [];
+        if (status === 'GO') parts.push('Proceed with deployment test then reservation.');
+        else if (status === 'CAUTION') parts.push('Accelerate deployment to lock capacity; monitor demand.');
+        else if (status === 'NO-GO' || status === 'INSUFFICIENT') parts.push('Re-scope region, model, or PTU count; engage Capacity Planning if blocked.');
+        else parts.push('Adjust filters or deploy type to obtain capacity signal.');
+        parts.push('Demand class: ' + signal + '.');
+        parts.push('Headroom: ' + cap.availablePTUs + '/' + cap.totalPTUs + ' PTUs.');
+        return parts.join(' ');
+      }
+
+      function renderCommitment() {
+        var req = parseInt(document.getElementById('req-ptu').value, 10) || 0;
+        var region = firstSorted(state.regions, ALL_REGIONS);
+        var model = firstSorted(state.models, ALL_MODELS);
+        var deploy = firstSorted(state.deployTypes, ALL_DEPLOY_TYPES);
+        var hero = document.getElementById('commitment-hero');
+        var sum = document.getElementById('commitment-summary');
+
+        if (!PTU_DEPLOY_TYPES.has(deploy)) {
+          hero.style.background = 'rgba(138,136,134,0.15)';
+          hero.style.borderColor = 'var(--border)';
+          hero.textContent =
+            'Commitment readiness applies to Provisioned (PTU) deploy types. Current deploy selection is Standard-class — switch to a Provisioned deploy type for PTU capacity assessment.';
+          sum.innerHTML = '';
+          return;
+        }
+
+        var res = assessCommitmentReadiness(region, model, deploy, req);
+        hero.style.background = res.color + '22';
+        hero.style.borderColor = res.color;
+        hero.style.color = 'var(--text-primary)';
+        hero.innerHTML = '<strong>' + res.status + '</strong> — ' + res.message;
+
+        var cap = MOCK_CAPACITY.find(function (c) {
+          return c.region === region && c.model === model && c.deployType === deploy;
+        });
+        if (!cap) {
+          sum.innerHTML =
+            '<div class="hero-col"><h4>Physical Capacity</h4><p class="hero-stat">—</p></div>' +
+            '<div class="hero-col"><h4>Demand Signal</h4><p class="hero-stat">—</p></div>' +
+            '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">No row for selection.</p></div>';
+          return;
+        }
+        var sig = getDemandSignal(cap.availablePTUs, cap.totalPTUs);
+        var sigCol = signalColor(sig);
+        var pct = (cap.availablePTUs / cap.totalPTUs) * 100;
+        var fillW = Math.max(0, Math.min(100, pct));
+
+        sum.innerHTML =
+          '<div class="hero-col"><h4>Physical Capacity</h4><p class="hero-stat">' +
+          cap.availablePTUs +
+          ' / ' +
+          cap.totalPTUs +
+          ' PTUs available</p><div class="fill-bar"><span style="width:' +
+          fillW +
+          '%;background:' +
+          sigCol +
+          '"></span></div></div>' +
+          '<div class="hero-col"><h4>Demand Signal</h4><p class="hero-stat"><span class="pulse-dot" style="background:' +
+          sigCol +
+          '"></span><span style="color:' +
+          sigCol +
+          '">' +
+          sig +
+          '</span></p><p style="font-size:12px;color:var(--text-secondary)">' +
+          Math.round(pct) +
+          '% of pool reported available (mock)</p></div>' +
+          '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">' +
+          buildActionParts(res.status, cap, sig) +
+          '</p></div>';
+      }
+
+      function heatmapEmoji(signal) {
+        if (signal === 'CRITICAL') return '🔴';
+        if (signal === 'HIGH') return '🟠';
+        if (signal === 'MEDIUM') return '🟡';
+        return '🟢';
+      }
+
+      function renderHeatmap() {
+        var table = document.getElementById('heatmap-table');
+        var selPTU = Array.from(state.deployTypes).filter(function (d) {
+          return PTU_DEPLOY_TYPES.has(d);
+        });
+        if (selPTU.length === 0) {
+          table.innerHTML =
+            '<tr><td>Select a Provisioned (PTU) deploy type to view available PTU heatmap (Capacity API).</td></tr>';
+          return;
+        }
+        var rows = ALL_MODELS.filter(function (m) {
+          return state.models.has(m);
+        });
+        var cols = ALL_REGIONS.filter(function (r) {
+          return state.regions.has(r);
+        });
+        var thead = '<tr><th>Model</th>' + cols.map(function (c) {
+          return '<th>' + c + '</th>';
+        }).join('') + '</tr>';
+        var body = rows
+          .map(function (model) {
+            var tds = cols.map(function (region) {
+              var candidates = MOCK_CAPACITY.filter(function (c) {
+                return (
+                  c.region === region &&
+                  c.model === model &&
+                  selPTU.indexOf(c.deployType) >= 0
+                );
+              });
+              if (!candidates.length) return '<td class="na">n/a</td>';
+              var worst = candidates.reduce(function (acc, c) {
+                var p = c.availablePTUs / c.totalPTUs;
+                if (!acc || p < acc.p) return { p: p, c: c };
+                return acc;
+              }, null);
+              var c = worst.c;
+              var signal = getDemandSignal(c.availablePTUs, c.totalPTUs);
+              var pct = Math.round((c.availablePTUs / c.totalPTUs) * 100);
+              var col = signalColor(signal);
+              var cls = signal === 'CRITICAL' ? ' cell-critical' : '';
+              var title =
+                c.availablePTUs +
+                '/' +
+                c.totalPTUs +
+                ' PTUs · ' +
+                signal +
+                ' · ' +
+                c.deployType;
+              return (
+                '<td class="' +
+                cls +
+                '" style="background:' +
+                col +
+                '33;color:var(--text-primary)" title="' +
+                title +
+                '">' +
+                heatmapEmoji(signal) +
+                ' ' +
+                pct +
+                '%</td>'
+              );
+            });
+            return '<tr><th style="text-align:left">' + model + '</th>' + tds.join('') + '</tr>';
+          })
+          .join('');
+        table.innerHTML = thead + body;
+      }
+
+      function renderFlags() {
+        var ul = document.getElementById('capacity-flags');
+        var flags = generateCapacityFlags(filterCapacityRows());
+        if (!flags.length) {
+          ul.innerHTML = '<li>No CRITICAL/HIGH flags for current filters.</li>';
+          return;
+        }
+        ul.innerHTML = flags.map(function (f) {
+          return '<li>' + f + '</li>';
+        }).join('');
+      }
+
+      function renderPtuBars() {
+        var box = document.getElementById('ptu-bars');
+        var rows = filterUtilRows();
+        if (!rows.length) {
+          box.innerHTML =
+            '<p style="color:var(--text-secondary)">No PTU utilization rows for current filters (Azure Monitor mock).</p>';
+          return;
+        }
+        box.innerHTML = rows
+          .map(function (u) {
+            var cap = MOCK_CAPACITY.find(function (c) {
+              return c.region === u.region && c.model === u.model && c.deployType === u.deployType;
+            });
+            var maxDeploy = cap ? cap.totalPTUs : Math.max(u.totalDeployedPTUs, 1);
+            var depPct = Math.min(100, (u.totalDeployedPTUs / maxDeploy) * 100);
+            var utilPctBar = Math.min(130, u.avgUtilizationPct);
+            var ucol = utilizationBarColor(u.avgUtilizationPct);
+            var note = '';
+            if (u.avgUtilizationPct > 100)
+              note =
+                '<p style="font-size:12px;color:var(--danger);margin-top:6px">⚠️ Overflowing to standard — latency impact possible (per provisioned throughput docs).</p>';
+            else if (u.avgUtilizationPct < 50)
+              note =
+                '<p style="font-size:12px;color:var(--success);margin-top:6px">May be over-provisioned vs observed load.</p>';
+            var cacheNote = '';
+            if (u.cacheMatchRate === 0)
+              cacheNote =
+                '<div class="cache-note">Cache match rate: 0% → opportunity: PTU deployments get up to 100% cache discount. Optimizing prompts for cache reuse could double effective throughput at zero extra cost. Source: provisioned throughput onboarding docs.</div>';
+            return (
+              '<div class="ptu-card"><h4>' +
+              u.region +
+              ' · ' +
+              u.model +
+              ' · ' +
+              u.deployType +
+              '</h4>' +
+              '<div class="bar-row"><div class="lbl"><span>Deployed</span><span>' +
+              u.totalDeployedPTUs +
+              ' PTUs</span></div>' +
+              '<div class="bar-track"><div style="width:' +
+              depPct +
+              '%;background:#0078d4"></div></div></div>' +
+              '<div class="bar-row"><div class="lbl"><span>Utilization</span><span style="color:' +
+              ucol +
+              '">' +
+              u.avgUtilizationPct +
+              '%' +
+              (u.avgUtilizationPct > 100 ? ' ⚠️' : '') +
+              '</span></div>' +
+              '<div class="bar-track"><div style="width:' +
+              Math.min(100, utilPctBar) +
+              '%;background:' +
+              ucol +
+              '"></div></div></div>' +
+              note +
+              cacheNote +
+              '</div>'
+            );
+          })
+          .join('');
+      }
+
+      function renderStandardTable() {
+        var tb = document.querySelector('#standard-table tbody');
+        var rows = filterStandardRows();
+        if (!rows.length) {
+          tb.innerHTML = '<tr><td colspan="6">No Standard usage rows for current filters.</td></tr>';
+          return;
+        }
+        tb.innerHTML = rows
+          .map(function (s) {
+            var th = throttleColor(s.throttledCallsPct);
+            var dt =
+              s.scopeType === 'GlobalStandard'
+                ? 'Global Standard'
+                : s.scopeType === 'DataZoneStandard'
+                  ? 'Data Zone Standard'
+                  : 'Regional Standard';
+            var note = s.note ? ' title="' + s.note.replace(/"/g, '&quot;') + '"' : '';
+            return (
+              '<tr' +
+              note +
+              '><td>' +
+              s.scope +
+              '</td><td>' +
+              dt +
+              '</td><td>' +
+              s.model +
+              '</td><td>' +
+              s.actualTPM_input.toLocaleString() +
+              '</td><td>' +
+              s.actualTPM_output.toLocaleString() +
+              '</td><td style="color:' +
+              th +
+              '">' +
+              (s.throttledCallsPct * 100).toFixed(1) +
+              '%</td></tr>'
+            );
+          })
+          .join('');
+      }
+
+      function renderDemand() {
+        var tb = document.querySelector('#demand-table tbody');
+        var rank = generateDemandRanking(filterCapacityRows());
+        if (!rank.length) {
+          tb.innerHTML = '<tr><td colspan="8">No capacity rows for current filters.</td></tr>';
+        } else {
+          tb.innerHTML = rank
+            .map(function (r) {
+              var bg = signalColor(r.signal) + '18';
+              var utilStr = r.utilPct != null ? r.utilPct + '%' : '—';
+              var thrStr = r.throttlePct != null ? (r.throttlePct * 100).toFixed(1) + '%' : '—';
+              return (
+                '<tr style="background:' +
+                bg +
+                '"><td>' +
+                r.region +
+                '</td><td>' +
+                r.model +
+                '</td><td>' +
+                r.deployType +
+                '</td><td>' +
+                r.availablePct +
+                '%</td><td>' +
+                utilStr +
+                '</td><td>' +
+                thrStr +
+                '</td><td style="color:' +
+                signalColor(r.signal) +
+                '">' +
+                r.signal +
+                '</td><td>' +
+                r.action +
+                '</td></tr>'
+              );
+            })
+            .join('');
+        }
+
+        var sparkBox = document.getElementById('sparklines');
+        var regions = ALL_REGIONS.filter(function (r) {
+          return state.regions.has(r);
+        });
+        sparkBox.innerHTML = regions
+          .map(function (region) {
+            var utilRow = MOCK_PTU_UTILIZATION.filter(function (u) {
+              return u.region === region && state.models.has(u.model) && state.deployTypes.has(u.deployType);
+            });
+            var base = utilRow.length
+              ? utilRow.reduce(function (a, b) {
+                  return a + b.avgUtilizationPct;
+                }, 0) / utilRow.length
+              : 35;
+            var hist = generatePTUHistory(base);
+            var w = 240;
+            var h = 72;
+            var pad = 4;
+            var maxY = 130;
+            var pts = hist
+              .map(function (pt, i) {
+                var x = pad + (i / (hist.length - 1)) * (w - pad * 2);
+                var y = h - pad - (pt.util / maxY) * (h - pad * 2);
+                return x + ',' + y;
+              })
+              .join(' ');
+            var y100 = h - pad - (100 / maxY) * (h - pad * 2);
+            return (
+              '<div class="spark-card"><h5>' +
+              region +
+              ' — PTU util (60m mock)</h5>' +
+              '<svg viewBox="0 0 ' +
+              w +
+              ' ' +
+              h +
+              '" preserveAspectRatio="none">' +
+              '<line x1="' +
+              pad +
+              '" y1="' +
+              y100 +
+              '" x2="' +
+              (w - pad) +
+              '" y2="' +
+              y100 +
+              '" stroke="#c8c6c4" stroke-dasharray="4 3" stroke-width="1"/>' +
+              '<polyline fill="none" stroke="#0078d4" stroke-width="1.5" points="' +
+              pts +
+              '"/>' +
+              '</svg></div>'
+            );
+          })
+          .join('');
+      }
+
+      function refreshDashboard() {
+        renderCommitment();
+        renderHeatmap();
+        renderFlags();
+        renderPtuBars();
+        renderStandardTable();
+        renderDemand();
+        tickRefreshLabels();
+      }
+
+      var currentUser = null;
+
+      function applyDefaultSections(view) {
+        var c = document.getElementById('sec-commitment');
+        var h = document.getElementById('sec-heatmap');
+        var d = document.getElementById('sec-deployed');
+        var m = document.getElementById('sec-demand');
+        c.open = h.open = d.open = m.open = false;
+        if (view === 'capacity') {
+          h.open = true;
+          m.open = true;
+        } else if (view === 'commitment') {
+          c.open = true;
+        } else if (view === 'utilization') {
+          d.open = true;
+        }
+      }
+
+      document.getElementById('login-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var email = document.getElementById('email').value.trim().toLowerCase();
+        var pw = document.getElementById('password').value;
+        var err = document.getElementById('login-error');
+        err.textContent = '';
+        var user = DEMO_USERS[email];
+        if (!user || user.password !== pw) {
+          err.textContent = "That Microsoft account doesn't exist. Try another.";
+          return;
+        }
+        document.getElementById('login-btn').disabled = true;
+        document.getElementById('auth-overlay').classList.add('visible');
+        document.getElementById('auth-overlay').setAttribute('aria-hidden', 'false');
+        setTimeout(function () {
+          currentUser = { email: email, profile: user };
+          document.getElementById('auth-overlay').classList.remove('visible');
+          document.getElementById('auth-overlay').setAttribute('aria-hidden', 'true');
+          document.getElementById('login-view').classList.add('hidden');
+          document.getElementById('app-view').classList.remove('hidden');
+          document.getElementById('user-name').textContent = user.name;
+          document.getElementById('user-initials').textContent = user.initials;
+          document.getElementById('user-title').textContent = user.title;
+          applyDefaultSections(user.defaultView);
+          renderFilters();
+          refreshDashboard();
+          document.getElementById('login-btn').disabled = false;
+        }, 1200);
+      });
+
+      document.getElementById('signout-btn').addEventListener('click', function () {
+        currentUser = null;
+        document.getElementById('app-view').classList.add('hidden');
+        document.getElementById('login-view').classList.remove('hidden');
+        document.getElementById('password').value = '';
+      });
+
+      document.getElementById('req-ptu').addEventListener('input', function () {
+        refreshDashboard();
+      });
+
+      attachFilterListeners();
+      setInterval(tickRefreshLabels, 30000);
+
+      /*
+       * Production Entra ID (MSAL.js) would replace the demo login above, e.g.:
+       * const msalConfig = { auth: { clientId: '...', authority: 'https://login.microsoftonline.com/{tenant}' } };
+       * const pca = new PublicClientApplication(msalConfig);
+       * await pca.loginPopup({ scopes: ['https://management.azure.com/.default'] });
+       * See: https://learn.microsoft.com/en-us/azure/foundry/concepts/authentication-authorization-foundry
+       */
+    })();
+  </script>
+</body>
+</html>

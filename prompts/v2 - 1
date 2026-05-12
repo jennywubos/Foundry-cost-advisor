@@ -1,0 +1,470 @@
+# Cursor Prompt: Azure AI Foundry PTU Commitment Advisor — v2
+
+---
+
+## PROJECT GOAL
+
+Build `v2/index.html` — a single-file, zero-dependency web app (pure HTML + CSS + JS, no build tools, no npm) that serves as a **one-stop-shop commitment decision dashboard** for Azure AI Foundry customers.
+
+**The gap this fills:**  
+Foundry portal's Quota page already shows capacity data visually. What doesn't exist is a single view combining: available capacity + quota allocation + actual usage + cache match rate + throttling events — all in one place to support a PTU commitment decision.
+
+**Output:** A single `v2/index.html` file, deployable directly to GitHub Pages.
+
+---
+
+## VISUAL DESIGN DIRECTION
+
+Aesthetic: **Azure-native enterprise dark dashboard** — refined, data-dense, professional.  
+Think: Azure Monitor / Grafana Dark meets Microsoft Fluent 2 design system.
+
+- Background: `#0a0e1a` (deep navy-black)
+- Surface cards: `#111827` with `1px solid #1e3a5f` borders
+- Primary accent: `#0078d4` (Azure blue)
+- Success/positive: `#00b294` (teal)
+- Warning: `#ffb900`
+- Danger/throttle: `#d13438`
+- Text primary: `#e8f4ff`
+- Text secondary: `#8ba4c0`
+- Font: Import `IBM Plex Mono` (for metrics/numbers) + `IBM Plex Sans` (for labels/copy) from Google Fonts
+
+Header: Show "Azure AI Foundry — PTU Commitment Advisor v2" with a live-updating clock (real JS time). Add a thin animated azure-blue progress bar across the very top to simulate "data refresh in progress."
+
+All metric cards should have subtle shimmer/pulse animations on load (CSS keyframes).  
+Charts: pure CSS bar charts + SVG sparklines — no external chart libraries.
+
+---
+
+## ARCHITECTURE: 3 API LAYERS (CODE WRITTEN, COMMENTED OUT)
+
+The app is structured around 3 real Azure APIs. Write the full implementation for each, then comment it out and replace with mock data. Each section must have a clear `/* === REAL API: [name] === ... === END REAL API === */` wrapper with inline comments explaining each parameter.
+
+---
+
+### API LAYER 1: Azure AI Capacity API
+
+**Purpose:** Show real-time available GPU capacity per model / region / deployment type.
+
+```javascript
+/* === REAL API: Azure AI Capacity API ===
+ * Endpoint: GET https://management.azure.com/subscriptions/{subscriptionId}
+ *           /providers/Microsoft.CognitiveServices/locations/{location}
+ *           /models?api-version=2024-10-01
+ *
+ * Auth: Bearer token via Azure AD (scope: https://management.azure.com/.default)
+ *       Use MSAL.js or DefaultAzureCredential in production.
+ *
+ * Key response fields:
+ *   - model.name                    → e.g. "gpt-4o-mini"
+ *   - model.skuName                 → e.g. "GlobalProvisionedManaged"
+ *   - model.availableCapacity       → PTU units available to allocate
+ *   - model.deploymentTypes[]       → ["GlobalStandard", "GlobalProvisionedManaged", "DataZone", "Regional"]
+ *   - location                      → Azure region, e.g. "eastus", "westus", "swedencentral"
+ *
+ * Required params:
+ *   subscriptionId  → from Azure Portal > Subscriptions
+ *   location        → target region
+ *   api-version     → "2024-10-01" (latest stable)
+ *
+ * async function fetchCapacity(subscriptionId, location, bearerToken) {
+ *   const url = `https://management.azure.com/subscriptions/${subscriptionId}
+ *                /providers/Microsoft.CognitiveServices/locations/${location}
+ *                /models?api-version=2024-10-01`;
+ *   const res = await fetch(url, {
+ *     headers: { Authorization: `Bearer ${bearerToken}` }
+ *   });
+ *   const data = await res.json();
+ *   return data.value; // array of model capacity objects
+ * }
+ * === END REAL API === */
+```
+
+**Mock data to use instead** (sourced from Chris's demo — GPT-4o-mini, eastus):
+
+```javascript
+const MOCK_CAPACITY = [
+  { model: "gpt-4o-mini", region: "East US",     deployType: "Global Provisioned-Managed", availablePTUs: 340, totalPTUs: 500 },
+  { model: "gpt-4o-mini", region: "East US",     deployType: "Global Standard",            availableTPM: 4200000, totalTPM: 6000000 },
+  { model: "gpt-4o-mini", region: "West Europe", deployType: "Global Provisioned-Managed", availablePTUs: 180, totalPTUs: 500 },
+  { model: "gpt-4o-mini", region: "Sweden Central", deployType: "Global Provisioned-Managed", availablePTUs: 210, totalPTUs: 500 },
+  { model: "gpt-4o",      region: "East US",     deployType: "Global Provisioned-Managed", availablePTUs: 120, totalPTUs: 300 },
+  { model: "gpt-4o",      region: "East US",     deployType: "Global Standard",            availableTPM: 1800000, totalTPM: 3000000 },
+];
+```
+
+---
+
+### API LAYER 2: Azure Monitor Metrics API
+
+**Purpose:** Pull real-time and historical usage — Input TPM, Output TPM, cache hit rate, throttling.
+
+```javascript
+/* === REAL API: Azure Monitor Metrics API ===
+ * Endpoint: GET https://management.azure.com/subscriptions/{subscriptionId}
+ *           /resourceGroups/{resourceGroupName}
+ *           /providers/Microsoft.CognitiveServices/accounts/{accountName}
+ *           /providers/microsoft.insights/metrics
+ *           ?api-version=2023-10-01
+ *           &metricnames=TokenTransaction,CacheHitRate,BlockedCalls,SuccessfulCalls
+ *           &timespan=PT1H
+ *           &interval=PT1M
+ *           &aggregation=Total,Average
+ *
+ * Auth: Bearer token (same scope as above)
+ *
+ * Required params:
+ *   subscriptionId    → Azure subscription ID (GUID)
+ *   resourceGroupName → Resource group containing the OpenAI resource
+ *   accountName       → Azure OpenAI resource name (e.g. "myopenai-eastus")
+ *
+ * Key metric names for Foundry/OpenAI:
+ *   "TokenTransaction"          → Input + output tokens (split by dimension "TokenType": prompt / completion)
+ *   "ProcessedPromptTokens"     → Prompt (input) tokens only
+ *   "GeneratedCompletionTokens" → Completion (output) tokens only
+ *   "CacheMatchRate"            → Prompt cache hit rate (0.0–1.0)
+ *   "BlockedCalls"              → Throttled (429) requests
+ *   "SuccessfulCalls"           → 200 OK requests
+ *   "ServerErrors"              → 500-level errors
+ *
+ * Note: subscriptionId alone is NOT sufficient — you must also provide
+ *   resourceGroupName + accountName (the full resource ARM path) to scope
+ *   metrics to a specific Azure OpenAI resource.
+ *
+ * async function fetchMonitorMetrics(subscriptionId, resourceGroup, accountName, bearerToken) {
+ *   const resourcePath = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}`
+ *     + `/providers/Microsoft.CognitiveServices/accounts/${accountName}`;
+ *   const url = `https://management.azure.com${resourcePath}`
+ *     + `/providers/microsoft.insights/metrics`
+ *     + `?api-version=2023-10-01`
+ *     + `&metricnames=ProcessedPromptTokens,GeneratedCompletionTokens,CacheMatchRate,BlockedCalls,SuccessfulCalls`
+ *     + `&timespan=PT1H&interval=PT1M&aggregation=Total,Average`;
+ *   const res = await fetch(url, {
+ *     headers: { Authorization: `Bearer ${bearerToken}` }
+ *   });
+ *   return await res.json();
+ * }
+ * === END REAL API === */
+```
+
+**Mock data** (directly from Chris's Grafana dashboard — exact values):
+
+```javascript
+// Phase 1: Standard deployment (first ~45 min of demo)
+// Phase 2: PTU deployment, no cache (next ~15 min)
+// Phase 3: PTU deployment, 50% cache match (last segment)
+
+const MOCK_MONITOR = {
+  currentDeployment: "Global Provisioned-Managed",
+  model: "gpt-4o-mini",
+  ptusAllocated: 95,
+
+  // Real-time snapshot (from Chris's live dashboard)
+  realtimeMetrics: {
+    requestsPerMinute: 437,          // After cache optimization (doubled from 220)
+    inputTPM: 6680000,               // 6.68M TPM with cache active
+    outputTPM: 43700,                // ~100 tokens × 437 req/min
+    avgPromptTokens: 15200,          // 15,000–15,400 range shown in demo
+    avgCompletionTokens: 100,        // narrow window ~100 tokens
+    cacheMatchRate: 0.50,            // 50% after optimization
+    utilizationPct: 100,             // 100% after cache (was 112% before)
+    timeToLastByteMs: 1100,          // dropped from 1400ms → 1100ms with cache
+    tokensPerSecond: 201,            // total throughput across all concurrent requests
+    throttledCallsPct: 0.02,         // ~2% throttle at 112% util before cache
+    costPerMinuteStandard: 1.01,     // Chris's slide: "$1.01/min at standard list price" with cache
+  },
+
+  // 60-minute history (1 data point per minute) — simulate 3 phases
+  history: generateMockHistory(),
+};
+
+function generateMockHistory() {
+  const points = [];
+  for (let i = 0; i < 60; i++) {
+    let rpm, tpm, cacheRate, util, ttlb;
+    if (i < 20) {
+      // Phase 1: Standard Global deployment baseline
+      rpm = 220 + Math.round((Math.random() - 0.5) * 15);
+      tpm = 3300000 + Math.round((Math.random() - 0.5) * 100000);
+      cacheRate = 0;
+      util = null; // N/A for standard
+      ttlb = 1350 + Math.round((Math.random() - 0.5) * 80);
+    } else if (i < 40) {
+      // Phase 2: PTU, no cache yet
+      rpm = 254 + Math.round((Math.random() - 0.5) * 12);
+      tpm = 3880000 + Math.round((Math.random() - 0.5) * 120000);
+      cacheRate = 0;
+      util = 112 + Math.round((Math.random() - 0.5) * 3);
+      ttlb = 1300 + Math.round((Math.random() - 0.5) * 60);
+    } else {
+      // Phase 3: PTU + 50% cache match
+      rpm = 437 + Math.round((Math.random() - 0.5) * 20);
+      tpm = 6680000 + Math.round((Math.random() - 0.5) * 200000);
+      cacheRate = 0.50 + (Math.random() - 0.5) * 0.04;
+      util = 100 + Math.round((Math.random() - 0.5) * 2);
+      ttlb = 1100 + Math.round((Math.random() - 0.5) * 50);
+    }
+    points.push({ minutesAgo: 60 - i, rpm, tpm, cacheRate, util, ttlb });
+  }
+  return points;
+}
+```
+
+---
+
+### API LAYER 3: Azure AI Foundry Quota API
+
+**Purpose:** Show subscription-level quota allocation vs. usage per model, deployment type, region. Show rate limit headroom.
+
+```javascript
+/* === REAL API: Azure AI Foundry Quota API ===
+ * Endpoint: GET https://management.azure.com/subscriptions/{subscriptionId}
+ *           /providers/Microsoft.CognitiveServices/locations/{location}
+ *           /usages?api-version=2024-10-01
+ *
+ * Also (for deployment-level quota):
+ *   GET https://management.azure.com/subscriptions/{subscriptionId}
+ *       /resourceGroups/{resourceGroup}
+ *       /providers/Microsoft.CognitiveServices/accounts/{accountName}
+ *       /deployments?api-version=2024-10-01
+ *
+ * Auth: Bearer token (same scope)
+ *
+ * Key response fields from /usages:
+ *   - name.value             → quota type, e.g. "OpenAI.Standard.gpt-4o-mini"
+ *   - currentValue           → PTUs or TPM currently allocated
+ *   - limit                  → max PTUs or TPM available to this subscription
+ *   - unit                   → "Count" (for PTUs) or "K" (for TPM × 1000)
+ *
+ * Key response fields from /deployments:
+ *   - name                   → deployment name (user-defined)
+ *   - properties.model.name  → model name
+ *   - properties.sku.name    → "GlobalProvisionedManaged" | "GlobalStandard" etc.
+ *   - properties.sku.capacity→ allocated PTUs (for PTU deployments)
+ *   - properties.rateLimits  → array of { key: "token", count: N, renewalPeriod: 60 }
+ *
+ * async function fetchQuota(subscriptionId, location, bearerToken) {
+ *   const url = `https://management.azure.com/subscriptions/${subscriptionId}`
+ *     + `/providers/Microsoft.CognitiveServices/locations/${location}`
+ *     + `/usages?api-version=2024-10-01`;
+ *   const res = await fetch(url, {
+ *     headers: { Authorization: `Bearer ${bearerToken}` }
+ *   });
+ *   return await res.json();
+ * }
+ * === END REAL API === */
+```
+
+**Mock data:**
+
+```javascript
+const MOCK_QUOTA = {
+  subscriptionId: "a1b2c3d4-xxxx-xxxx-xxxx-demo00000001",
+  location: "East US",
+  quotaAllocations: [
+    {
+      model: "gpt-4o-mini",
+      deployType: "Global Provisioned-Managed",
+      allocatedPTUs: 95,           // exactly what Chris deployed
+      subscriptionLimitPTUs: 500,
+      deploymentName: "gpt4omini-prod-ptu",
+      rateLimitTPM: null,          // PTU = no TPM rate limit, capacity-governed
+    },
+    {
+      model: "gpt-4o-mini",
+      deployType: "Global Standard",
+      allocatedTPM: 1000000,       // 1M TPM allocated
+      subscriptionLimitTPM: 6000000,
+      deploymentName: "gpt4omini-dev-standard",
+      rateLimitTPM: 1000000,
+    },
+    {
+      model: "gpt-4o",
+      deployType: "Global Standard",
+      allocatedTPM: 500000,
+      subscriptionLimitTPM: 3000000,
+      deploymentName: "gpt4o-standard",
+      rateLimitTPM: 500000,
+    },
+  ],
+};
+```
+
+---
+
+## UI LAYOUT: 5 SECTIONS
+
+### SECTION 0: Config Bar (top strip)
+Collapsed by default, expandable. Shows input fields:
+- Subscription ID (pre-filled: `a1b2c3d4-xxxx-xxxx-xxxx-demo00000001`)
+- Resource Group (pre-filled: `rg-foundry-prod`)
+- Account Name (pre-filled: `openai-eastus-prod`)
+- Region dropdown (default: East US)
+- "🔴 LIVE APIs disabled — running on demo data" badge (red pill, always visible)
+- "Connect Live APIs" button (disabled/greyed out with tooltip: "Requires Azure AD Bearer Token — available when deployed within Azure")
+
+---
+
+### SECTION 1: Capacity Availability Panel
+Title: **"Available Capacity"** | Source badge: `Capacity API`
+
+Display a responsive grid of cards, one per model+region+deployType combo.
+
+Each card shows:
+- Model name (large, monospace)
+- Region + Deploy Type
+- Availability bar: `████████░░` (filled = used, empty = available) — CSS animated fill
+- For PTU types: "X of Y PTUs available"
+- For Standard: "X of Y M TPM available"
+- Color coding: green > 50%, yellow 20–50%, red < 20%
+
+Add a filter row: [All Models ▾] [All Regions ▾] [All Deploy Types ▾]
+
+---
+
+### SECTION 2: Live Usage Dashboard
+Title: **"Real-Time Usage — Last 60 Minutes"** | Source badge: `Azure Monitor API`
+
+Left column — KPI cards (2×3 grid):
+| Metric | Value | Delta |
+|---|---|---|
+| Requests/min | 437 | ▲ +98% vs baseline |
+| Input TPM | 6.68M | ▲ +103% |
+| Cache Match Rate | 50% | ▲ from 0% |
+| PTU Utilization | 100% | ↓ from 112% |
+| Time to Last Byte | 1,100ms | ↓ -21% |
+| Throttled Calls | <1% | ↓ from 2% |
+
+Right column — SVG sparkline chart:
+- X-axis: 60 minutes
+- 3 colored lines: RPM (blue), TPM/1M (teal), Cache Rate×100 (amber)
+- Vertical dashed line at minute 20: "Switched to PTU"
+- Vertical dashed line at minute 40: "Cache Optimization Applied"
+- Labels on the right end of each line
+
+Below the chart: Phase legend strip
+- `[Phase 1: Standard]` `[Phase 2: PTU — No Cache]` `[Phase 3: PTU + 50% Cache]`
+
+---
+
+### SECTION 3: Quota Allocation Panel
+Title: **"Quota & Allocation Status"** | Source badge: `Foundry Quota API`
+
+Table with columns:
+`Deployment Name | Model | Type | Allocated | Subscription Limit | % Used | Rate Limit | Status`
+
+Color-code the % Used bar. Add a "⚠️ Approaching Limit" badge if > 80%.
+
+Bottom of section: Subscription-level summary:
+- "Total PTUs allocated: 95 / 500 (19%)"
+- "Standard TPM allocated: 1.5M / 9M (17%)"
+
+---
+
+### SECTION 4: Commitment Advisor (THE CORE)
+Title: **"PTU Commitment Advisor"** | Recommendation engine
+
+**Input panel** (editable, pre-filled with Chris's demo values):
+- Monthly Input Tokens (M): `[4,838]` ← 3.38M TPM × 60min × 24hr × 30days / 1M, then ÷ 2 for mix
+- Monthly Output Tokens (M): `[63]`
+- PTU Count (if already considering): `[95]`
+- Cache Match Rate (%): `[50]`
+- Hours per day: `[24]`
+- Days per month: `[30]`
+- Workload pattern: `[Consistent 24/7 ▾]` (options: Consistent 24/7, Business hours only 8×5, Spiky/bursty)
+
+**Three-column comparison cards:**
+
+```
+┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│  STANDARD (PAYG)    │  │ PRIORITY PROCESSING  │  │  PROVISIONED (PTU)  │
+│                     │  │                      │  │                     │
+│ $0.00015/1K input   │  │ $0.00024/1K input    │  │ $260/PTU/month      │
+│ $0.00060/1K output  │  │ $0.00096/1K output   │  │ Fixed capacity      │
+│                     │  │                      │  │                     │
+│ Monthly est:        │  │ Monthly est:          │  │ Monthly est:        │
+│ ~$12,006            │  │ ~$19,210              │  │ ~$24,700            │
+│                     │  │ (1.6× Standard)       │  │ (95 PTUs)           │
+│ ❌ No SLA           │  │ ✅ Priority routing   │  │ ✅ Dedicated GPU    │
+│ ❌ Throttle risk    │  │ ✅ Lower throttle     │  │ ✅ Predictable lat  │
+│ ❌ Variable latency │  │ ⚠️ Still PAYG        │  │ ✅ No throttle      │
+│ ✅ No commitment    │  │ ✅ No commitment      │  │ ⚠️ 1-yr commitment  │
+└─────────────────────┘  └─────────────────────┘  └─────────────────────┘
+```
+
+Pricing logic (hardcoded as constants, with comment pointing to: https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/):
+```javascript
+const PRICING = {
+  standard:  { input: 0.00015, output: 0.00060 },  // per 1K tokens, gpt-4o-mini
+  priority:  { input: 0.00024, output: 0.00096 },  // +60% premium (Priority Processing)
+  ptu:       { perPTUperMonth: 260 }               // $260/PTU/month (no annual commit)
+};
+```
+
+**Recommendation banner** (logic-driven, appears below cards):
+
+Rules:
+- If `cacheMatchRate >= 0.40` AND `workload === "Consistent 24/7"` → **"✅ RECOMMENDED: Provisioned (PTU)"** — green banner
+- If `cacheMatchRate < 0.20` AND `workload === "Consistent 24/7"` AND `ptus < 50` → **"⚡ CONSIDER: Priority Processing"** — yellow banner
+- If `workload === "Spiky/bursty"` → **"💡 RECOMMENDED: Priority Processing + Standard fallback"** — blue banner
+- Default → **"⚖️ PTU vs Priority Processing: Within 20% — evaluate based on SLA requirements"** — grey banner
+
+Below banner: **Cache Impact Analysis** box:
+- "With 50% cache match rate on 95 PTUs:"
+- "Effective throughput: 2× (437 RPM vs 220 RPM baseline)"
+- "Latency improvement: -21% (1,400ms → 1,100ms)"
+- "Standard equivalent cost at this throughput: ~$1.01/min = ~$43,600/month"
+- "PTU cost: $24,700/month → **43% savings vs Standard at scale**"
+- Source note: `* Cost estimates based on demo workload: 15,200 avg prompt tokens, 100 avg completion tokens, GPT-4o-mini pricing`
+
+---
+
+### SECTION 5: Footer
+- "Data sources: Azure AI Capacity API · Azure Monitor Metrics API · Azure AI Foundry Quota API"
+- "Currently displaying: Demo data (simulated from Azure AI Foundry Ignite 2025 demo)"  
+- "Build: v2.0 | GitHub: jennywubos/Foundry-cost-advisor"
+- Link to v1: `← v1 (manual input)`
+
+---
+
+## TECHNICAL REQUIREMENTS
+
+1. **Single file**: Everything in `v2/index.html` — inline CSS, inline JS, no external dependencies except Google Fonts CDN and optionally one icon SVG inline.
+
+2. **No build tools**: Must open directly in browser OR via GitHub Pages. No React, no npm, no bundler.
+
+3. **Auto-refresh simulation**: Every 30 seconds, re-run `generateMockHistory()` with slight random variation and update all KPI cards with a brief flash animation (CSS `@keyframes pulse-update`).
+
+4. **Responsive**: Works on 1280px+ desktop. Mobile: stack all columns vertically.
+
+5. **API code placement**: Each commented-out API block appears DIRECTLY ABOVE the mock data that replaces it, in the same `<script>` tag. Comments use `/* === REAL API: ... === */` wrapper exactly as shown above.
+
+6. **All numbers must match Chris's demo exactly:**
+   - 95 PTUs for gpt-4o-mini
+   - $260/PTU/month
+   - 220 RPM → 254 RPM → 437 RPM (three phases)
+   - 3.3M → 3.88M → 6.68M TPM
+   - 1,400ms → 1,100ms latency
+   - 15,000–15,400 avg prompt tokens
+   - ~100 avg completion tokens
+   - 112% utilization at peak
+   - $1.01/min at standard list price (post-cache)
+   - 200 tokens/second throughput
+   - SLA for gpt-4o-mini: 33 tokens/second per request
+
+7. **Interactivity**: The Commitment Advisor inputs in Section 4 should be live — changing any input immediately recalculates all three cost estimates and updates the recommendation banner. No submit button needed — use `oninput`.
+
+8. **GitHub Pages ready**: Relative paths only, no server-side dependencies, works at `https://jennywubos.github.io/Foundry-cost-advisor/v2/`.
+
+---
+
+## FILE PLACEMENT
+
+Create this file at: `v2/index.html`  
+Do NOT modify `v1/index.html`.  
+Do NOT create any other files (no package.json, no CSS files, no JS files).
+
+---
+
+## START BUILDING NOW.
+
+Begin with the full HTML structure, then CSS variables and base styles, then section by section. Write ALL sections completely — do not truncate or leave placeholders. The final file should be fully functional when opened in a browser.
