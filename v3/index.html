@@ -921,6 +921,7 @@
       }
 
       function assessCommitmentReadiness(region, deployType, requestedPTUs) {
+        var reqPTU = Math.max(0, Math.floor(Number(requestedPTUs)) || 0);
         var cap = aggregateCapacity(region, deployType);
         if (!cap) {
           return {
@@ -929,9 +930,9 @@
             message: 'No mocked capacity rows for ' + region + ' with deploy type "' + deployType + '".',
           };
         }
-        var signal = getDemandSignal(cap.availablePTUs, cap.totalPTUs);
         var avail = cap.availablePTUs;
-        var pctFree = Math.round((avail / cap.totalPTUs) * 100);
+        var total = cap.totalPTUs;
+        var signal = getDemandSignal(avail, total);
 
         if (avail === 0) {
           return {
@@ -943,16 +944,16 @@
               ' for ' +
               deployType +
               ' (aggregated across models). Need ' +
-              requestedPTUs +
+              reqPTU +
               '. Alternatives: ' +
-              getAlternativeRegionsDeploy(deployType, requestedPTUs) +
+              getAlternativeRegionsDeploy(deployType, reqPTU) +
               '. Escalate to Azure Capacity Planning for ' +
               region +
               ' GPU expansion.',
           };
         }
 
-        if (avail < requestedPTUs) {
+        if (avail < reqPTU) {
           return {
             status: 'NO-GO',
             color: '#a4262c',
@@ -964,76 +965,57 @@
               ' for ' +
               deployType +
               ', but ' +
-              requestedPTUs +
+              reqPTU +
               ' requested. Alternatives: ' +
-              getAlternativeRegionsDeploy(deployType, requestedPTUs) +
+              getAlternativeRegionsDeploy(deployType, reqPTU) +
               '. Consider splitting across regions or reducing commitment size.',
           };
         }
 
-        if (signal === 'LOW') {
+        var remainingPTUs = avail - reqPTU;
+        var remainingPct = total > 0 ? remainingPTUs / total : 0;
+        var zPct = Math.round(remainingPct * 100);
+
+        if (remainingPct > 0.3 && (signal === 'LOW' || signal === 'MEDIUM')) {
           return {
             status: 'GO',
             color: '#107c10',
             message:
               '✅ ' +
               avail +
-              ' PTUs available (aggregated across models) in ' +
-              region +
-              ' for ' +
-              deployType +
-              ' (' +
-              pctFree +
-              '% of mocked physical pool free). Demand signal: LOW. Safe to commit. Recommended: Deploy hourly first to lock capacity → then purchase Annual Reservation.',
+              ' PTUs available, ' +
+              remainingPTUs +
+              ' remaining after commitment (' +
+              zPct +
+              '%). Safe to commit.',
           };
         }
 
-        if (signal === 'MEDIUM') {
+        if (remainingPct < 0.1 || signal === 'CRITICAL') {
           return {
-            status: 'GO',
-            color: '#107c10',
+            status: 'CAUTION',
+            color: '#ca5010',
             message:
-              '✅ ' +
-              avail +
-              ' PTUs cover the request in ' +
-              region +
-              ' for ' +
-              deployType +
-              ' (' +
-              pctFree +
-              '% of pool free). Demand signal: MEDIUM — capacity is sufficient; demand is growing. Monitor and deploy soon to lock capacity before signing.',
+              '⚠️ Extremely tight — only ' +
+              remainingPTUs +
+              ' PTUs remaining after commitment (' +
+              zPct +
+              '%).<br/>High risk of capacity loss. Deploy TODAY.',
           };
         }
 
-        if (signal === 'HIGH') {
+        if ((remainingPct >= 0.1 && remainingPct <= 0.3) || signal === 'HIGH') {
           return {
             status: 'CAUTION',
             color: '#ca5010',
             message:
               '⚠️ ' +
               avail +
-              ' PTUs cover the request in ' +
-              region +
-              ' for ' +
-              deployType +
-              ', but demand is HIGH. Enough capacity now — risk of losing it before contract start. Deploy immediately to lock capacity.',
-          };
-        }
-
-        if (signal === 'CRITICAL') {
-          return {
-            status: 'CAUTION',
-            color: '#ca5010',
-            message:
-              '⚠️ ' +
-              avail +
-              ' PTUs barely cover the request in ' +
-              region +
-              ' for ' +
-              deployType +
-              ' (CRITICAL supply — ' +
-              pctFree +
-              '% headroom). Deploy immediately before capacity is gone; escalation advised.',
+              ' PTUs available but only ' +
+              remainingPTUs +
+              ' remaining after commitment (' +
+              zPct +
+              '%).<br/>Deploy immediately to lock capacity before signing.',
           };
         }
 
@@ -1043,11 +1025,13 @@
           message:
             '⚠️ ' +
             avail +
-            ' PTUs available in ' +
-            region +
-            ' for ' +
-            deployType +
-            '. Demand class unclear — treat as CAUTION and validate in portal.',
+            ' PTUs available; ' +
+            remainingPTUs +
+            ' remaining after commitment (' +
+            zPct +
+            '%). Demand signal: ' +
+            signal +
+            '. Validate in portal before signing.',
         };
       }
 
@@ -1238,7 +1222,7 @@
         });
       }
 
-      function buildActionParts(status, cap, signal) {
+      function buildActionParts(status, cap, signal, requestedPTUs) {
         var parts = [];
         if (status === 'GO') parts.push('Proceed with deployment test then reservation.');
         else if (status === 'CAUTION') parts.push('Accelerate deployment to lock capacity; monitor demand.');
@@ -1246,6 +1230,11 @@
         else parts.push('Adjust filters or deploy type to obtain capacity signal.');
         parts.push('Demand class: ' + signal + '.');
         parts.push('Headroom: ' + cap.availablePTUs + '/' + cap.totalPTUs + ' PTUs (aggregated mock).');
+        if (requestedPTUs != null && cap.totalPTUs > 0 && cap.availablePTUs >= requestedPTUs) {
+          var rem = cap.availablePTUs - requestedPTUs;
+          var remPct = rem / cap.totalPTUs;
+          parts.push('Buffer after commitment: ' + rem + ' PTUs (' + Math.round(remPct * 100) + '% of pool).');
+        }
         return parts.join(' ');
       }
 
@@ -1306,7 +1295,7 @@
           Math.round(pct) +
           '% of mocked physical pool reported available</p></div>' +
           '<div class="hero-col"><h4>Recommended Action</h4><p style="font-size:13px;color:var(--text-secondary)">' +
-          buildActionParts(res.status, cap, sig) +
+          buildActionParts(res.status, cap, sig, req) +
           '</p></div>';
       }
 
